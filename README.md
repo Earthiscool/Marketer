@@ -46,3 +46,11 @@ http://localhost:5180/oauth2callback
 
 Secrets, Gmail tokens, local databases, generated PDFs, build output, and `node_modules` are intentionally ignored.
 
+## Deploy To Vercel
+
+The root project is configured with `vercel.json` for a static team-facing deployment:
+
+- `/` serves the Marketer launcher.
+- `/growth-studio` serves the browser-only CRM/demo builder.
+
+The Gmail Growth Agent is included in the repo, but it is not automatically hosted by the static Vercel launcher because Gmail OAuth tokens need durable storage. Use a hosted database before enabling it for a team deployment.
