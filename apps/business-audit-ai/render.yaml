@@ -1,0 +1,23 @@
+services:
+  - type: web
+    name: business-audit-ai
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app --workers 2 --timeout 300 --bind 0.0.0.0:$PORT
+    envVars:
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
+      - key: SCREENSHOTONE_API_KEY
+        sync: false
+      - key: AGENCY_NAME
+        sync: false
+      - key: AGENCY_EMAIL
+        sync: false
+      - key: AGENCY_PHONE
+        sync: false
+      - key: AGENCY_WEBSITE
+        sync: false
+      - key: AGENCY_TAGLINE
+        sync: false

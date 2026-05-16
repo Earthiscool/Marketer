@@ -1,0 +1,17 @@
+.env
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.json
+!package.json
+.DS_Store
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+batch_summary.csv
+audits.db
+*.pdf
+report_*.pdf

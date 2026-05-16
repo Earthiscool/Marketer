@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Summit Gmail Growth Agent</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <aside class="sidebar">
+        <div class="brand">
+          <div class="mark">S</div>
+          <div>
+            <p>Summit Systems</p>
+            <h1>Gmail Growth Agent</h1>
+          </div>
+        </div>
+        <button id="connectBtn" class="primary">Connect Gmail</button>
+        <button id="syncBtn" class="secondary">Sync Gmail</button>
+        <p id="connectionStatus" class="status-text">Checking connection...</p>
+        <div class="metric-stack">
+          <div><strong id="sentCount">0</strong><span>sent analyzed</span></div>
+          <div><strong id="openRate">0%</strong><span>open rate</span></div>
+          <div><strong id="replyRate">0%</strong><span>reply rate</span></div>
+        </div>
+      </aside>
+
+      <section class="workspace">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">Auto-adjusts from Gmail replies and opened labels</p>
+            <h2>Strategy Dashboard</h2>
+          </div>
+          <button id="exportBtn" class="secondary">Export leads</button>
+        </header>
+
+        <section class="grid">
+          <article class="panel">
+            <div class="panel-head">
+              <p class="eyebrow">Recommendations</p>
+              <h3>What the system would change now</h3>
+            </div>
+            <ul id="recommendations" class="recommendations"></ul>
+          </article>
+
+          <article class="panel">
+            <div class="panel-head">
+              <p class="eyebrow">Pattern scores</p>
+              <h3>Subject traits</h3>
+            </div>
+            <div id="featureStats" class="feature-list"></div>
+          </article>
+        </section>
+
+        <section class="panel leads-panel">
+          <div class="panel-head row">
+            <div>
+              <p class="eyebrow">CRM</p>
+              <h3>Gmail-informed leads</h3>
+            </div>
+            <input id="searchInput" placeholder="Search leads..." />
+          </div>
+          <div id="leadList" class="lead-list"></div>
+        </section>
+
+        <section class="grid">
+          <article class="panel">
+            <div class="panel-head">
+              <p class="eyebrow">Adaptive email</p>
+              <h3 id="draftTitle">Select a lead</h3>
+            </div>
+            <pre id="draftOutput" class="copy-box"></pre>
+            <button id="copyDraftBtn" class="primary">Copy draft</button>
+          </article>
+
+          <article class="panel">
+            <div class="panel-head">
+              <p class="eyebrow">Winning words</p>
+              <h3>Best subject terms</h3>
+            </div>
+            <div id="wordStats" class="word-list"></div>
+          </article>
+        </section>
+      </section>
+    </main>
+    <script src="/app.js"></script>
+  </body>
+</html>
