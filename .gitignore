@@ -17,3 +17,4 @@ data/gmail-token.json
 audit_*.json
 report_*.pdf
 
+.vercel
