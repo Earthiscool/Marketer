@@ -2,9 +2,6 @@
   "version": 2,
   "cleanUrls": true,
   "rewrites": [
-    { "source": "/", "destination": "/launcher/index.html" },
-    { "source": "/launcher.css", "destination": "/launcher/launcher.css" },
-    { "source": "/growth-studio", "destination": "/apps/summit-growth-studio/index.html" },
-    { "source": "/growth-studio/:path*", "destination": "/apps/summit-growth-studio/:path*" }
+    { "source": "/growth-studio", "destination": "/growth-studio/index.html" }
   ]
 }
