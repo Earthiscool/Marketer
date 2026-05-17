@@ -56,7 +56,7 @@
           <div class="topbar-actions">
             <button id="seedLeadsBtn" class="ghost-btn" type="button">Load sample leads</button>
             <button id="loadSharedBtn" class="ghost-btn" type="button">Load shared</button>
-            <button id="saveSharedBtn" class="primary-btn" type="button">Save shared</button>
+            <button id="saveSharedBtn" class="primary-btn" type="button">Sync now</button>
             <button id="importJsonBtn" class="ghost-btn" type="button">Import team data</button>
             <button id="exportJsonBtn" class="primary-btn" type="button">Export data</button>
             <input id="importJsonInput" type="file" accept="application/json" hidden />
@@ -198,9 +198,11 @@
               <div class="button-row">
                 <button id="saveDbConfigBtn" class="primary-btn" type="button">Save database settings</button>
                 <button id="loadSharedBtnSecondary" class="ghost-btn" type="button">Load shared</button>
-                <button id="saveSharedBtnSecondary" class="ghost-btn" type="button">Save shared</button>
+                <button id="saveSharedBtnSecondary" class="ghost-btn" type="button">Sync now</button>
               </div>
-              <pre class="copy-box schema-box">Create this table in Supabase SQL Editor:
+              <pre class="copy-box schema-box">Autosave is on. The app loads this workspace on page open and saves edits after changes.
+
+Create this table in Supabase SQL Editor:
 
 create table if not exists public.marketing_engine_states (
   id text primary key,

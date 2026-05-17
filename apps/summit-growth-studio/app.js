@@ -21,6 +21,9 @@ const state = {
 };
 
 const $ = (id) => document.getElementById(id);
+let isHydrating = false;
+let autosaveTimer = null;
+let lastSavedHash = "";
 
 function getDbConfig() {
   try {
@@ -80,6 +83,7 @@ async function supabaseRequest(path, options = {}) {
 
 function save() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify({ leads: state.leads, demo: state.demo }));
+  scheduleSharedAutosave();
 }
 
 function load() {
@@ -521,40 +525,67 @@ function exportJson() {
   URL.revokeObjectURL(url);
 }
 
+function sharedPayload() {
+  return { leads: state.leads, demo: state.demo };
+}
+
+function sharedPayloadHash() {
+  return JSON.stringify(sharedPayload());
+}
+
+function scheduleSharedAutosave() {
+  if (isHydrating) return;
+  const config = getDbConfig();
+  if (!config.url || !config.anonKey) return;
+  window.clearTimeout(autosaveTimer);
+  autosaveTimer = window.setTimeout(() => saveSharedState({ silent: true }), 900);
+}
+
 async function loadSharedState() {
   const config = getDbConfig();
   setDbStatus("Loading shared workspace...");
   try {
     const rows = await supabaseRequest(`marketing_engine_states?id=eq.${encodeURIComponent(config.workspaceId)}&select=data,updated_at`);
     if (!rows.length) {
-      setDbStatus(`No shared data found for "${config.workspaceId}". Save shared to create it.`);
+      setDbStatus(`Creating shared workspace "${config.workspaceId}"...`);
+      await saveSharedState({ silent: true, force: true });
       return;
     }
     const data = rows[0].data || {};
+    isHydrating = true;
     state.leads = Array.isArray(data.leads) ? data.leads : [];
     state.demo = { ...state.demo, ...(data.demo || {}) };
     save();
+    isHydrating = false;
+    lastSavedHash = sharedPayloadHash();
     renderAll();
     setDbStatus(`Loaded shared workspace "${config.workspaceId}" from ${new Date(rows[0].updated_at).toLocaleString()}.`);
   } catch (error) {
+    isHydrating = false;
     setDbStatus(`Load failed: ${error.message}`, true);
   }
 }
 
-async function saveSharedState() {
+async function saveSharedState(options = {}) {
   const config = getDbConfig();
-  setDbStatus("Saving shared workspace...");
+  const hash = sharedPayloadHash();
+  if (!options.force && hash === lastSavedHash) {
+    if (!options.silent) setDbStatus(`No changes to sync for "${config.workspaceId}".`);
+    return;
+  }
+  if (!options.silent) setDbStatus("Saving shared workspace...");
   try {
-    await supabaseRequest("marketing_engine_states", {
+    await supabaseRequest("marketing_engine_states?on_conflict=id", {
       method: "POST",
       headers: { prefer: "resolution=merge-duplicates,return=minimal" },
       body: JSON.stringify({
         id: config.workspaceId,
-        data: { leads: state.leads, demo: state.demo },
+        data: sharedPayload(),
         updated_at: new Date().toISOString(),
       }),
     });
-    setDbStatus(`Saved shared workspace "${config.workspaceId}".`);
+    lastSavedHash = hash;
+    setDbStatus(`${options.silent ? "Autosaved" : "Saved"} shared workspace "${config.workspaceId}" at ${new Date().toLocaleTimeString()}.`);
   } catch (error) {
     setDbStatus(`Save failed: ${error.message}`, true);
   }
@@ -571,7 +602,7 @@ function importJsonFile(file) {
       state.demo = { ...state.demo, ...(imported.demo || {}) };
       save();
       renderAll();
-      alert("Team campaign data imported.");
+      setDbStatus("Imported campaign data. Autosave will sync it.");
     } catch (error) {
       alert(`Import failed: ${error.message}`);
     }
@@ -667,3 +698,4 @@ load();
 bindEvents();
 renderAll();
 fillDbConfigForm();
+window.setTimeout(loadSharedState, 250);
