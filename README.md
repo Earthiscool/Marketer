@@ -57,6 +57,8 @@ The browser marketing engine supports Supabase sync for a shared team workspace.
 5. In the app, open **Exports -> Team database**, paste the URL/key, choose a workspace ID such as `summit-team`, then save settings.
 6. Use **Save shared** to write the current CRM/demo state and **Load shared** on teammate browsers.
 
+The deployed app is prefilled with the current Supabase project URL and anon key. Teammates should only need the shared workspace ID unless you rotate keys.
+
 The anon key is safe to expose for browser apps, but the permissive demo policies in the app are intended for a private team workspace. Tighten RLS policies before storing sensitive client data.
 
 ## Deploy To Vercel

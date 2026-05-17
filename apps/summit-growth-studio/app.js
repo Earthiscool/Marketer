@@ -1,5 +1,10 @@
 const STORAGE_KEY = "summit_growth_studio_v1";
 const DB_CONFIG_KEY = "summit_growth_studio_supabase_v1";
+const DEFAULT_DB_CONFIG = {
+  url: "https://wfnkfuxyfblocbinsbaj.supabase.co",
+  anonKey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndmbmtmdXh5ZmJsb2NiaW5zYmFqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg5ODMxNjcsImV4cCI6MjA5NDU1OTE2N30.56o_zJbkLfTziOgUUSGaL1oqleIC_mHctmn_fuK1DBk",
+  workspaceId: "summit-team",
+};
 
 const state = {
   leads: [],
@@ -21,12 +26,12 @@ function getDbConfig() {
   try {
     const config = JSON.parse(localStorage.getItem(DB_CONFIG_KEY) || "{}");
     return {
-      url: String(config.url || "").replace(/\/+$/, ""),
-      anonKey: String(config.anonKey || ""),
-      workspaceId: String(config.workspaceId || "summit-team").trim() || "summit-team",
+      url: String(config.url || DEFAULT_DB_CONFIG.url).replace(/\/+$/, ""),
+      anonKey: String(config.anonKey || DEFAULT_DB_CONFIG.anonKey),
+      workspaceId: String(config.workspaceId || DEFAULT_DB_CONFIG.workspaceId).trim() || DEFAULT_DB_CONFIG.workspaceId,
     };
   } catch {
-    return { url: "", anonKey: "", workspaceId: "summit-team" };
+    return DEFAULT_DB_CONFIG;
   }
 }
 
