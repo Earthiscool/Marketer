@@ -1,4 +1,5 @@
 const STORAGE_KEY = "summit_growth_studio_v1";
+const DB_CONFIG_KEY = "summit_growth_studio_supabase_v1";
 
 const state = {
   leads: [],
@@ -15,6 +16,61 @@ const state = {
 };
 
 const $ = (id) => document.getElementById(id);
+
+function getDbConfig() {
+  try {
+    const config = JSON.parse(localStorage.getItem(DB_CONFIG_KEY) || "{}");
+    return {
+      url: String(config.url || "").replace(/\/+$/, ""),
+      anonKey: String(config.anonKey || ""),
+      workspaceId: String(config.workspaceId || "summit-team").trim() || "summit-team",
+    };
+  } catch {
+    return { url: "", anonKey: "", workspaceId: "summit-team" };
+  }
+}
+
+function setDbStatus(message, isError = false) {
+  const el = $("dbStatus");
+  if (!el) return;
+  el.textContent = message;
+  el.style.color = isError ? "#bd3b3b" : "";
+}
+
+function fillDbConfigForm() {
+  const config = getDbConfig();
+  if ($("supabaseUrl")) $("supabaseUrl").value = config.url;
+  if ($("supabaseAnonKey")) $("supabaseAnonKey").value = config.anonKey;
+  if ($("workspaceId")) $("workspaceId").value = config.workspaceId;
+  if (config.url && config.anonKey) setDbStatus(`Ready to sync workspace "${config.workspaceId}".`);
+}
+
+function saveDbConfig() {
+  const config = {
+    url: $("supabaseUrl").value.trim().replace(/\/+$/, ""),
+    anonKey: $("supabaseAnonKey").value.trim(),
+    workspaceId: $("workspaceId").value.trim() || "summit-team",
+  };
+  localStorage.setItem(DB_CONFIG_KEY, JSON.stringify(config));
+  setDbStatus(`Saved database settings for workspace "${config.workspaceId}".`);
+}
+
+async function supabaseRequest(path, options = {}) {
+  const config = getDbConfig();
+  if (!config.url || !config.anonKey) throw new Error("Add Supabase URL and anon key first.");
+  const res = await fetch(`${config.url}/rest/v1/${path}`, {
+    ...options,
+    headers: {
+      apikey: config.anonKey,
+      authorization: `Bearer ${config.anonKey}`,
+      "content-type": "application/json",
+      ...(options.headers || {}),
+    },
+  });
+  if (!res.ok) throw new Error(await res.text());
+  if (res.status === 204) return null;
+  return res.json();
+}
 
 function save() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify({ leads: state.leads, demo: state.demo }));
@@ -459,6 +515,64 @@ function exportJson() {
   URL.revokeObjectURL(url);
 }
 
+async function loadSharedState() {
+  const config = getDbConfig();
+  setDbStatus("Loading shared workspace...");
+  try {
+    const rows = await supabaseRequest(`marketing_engine_states?id=eq.${encodeURIComponent(config.workspaceId)}&select=data,updated_at`);
+    if (!rows.length) {
+      setDbStatus(`No shared data found for "${config.workspaceId}". Save shared to create it.`);
+      return;
+    }
+    const data = rows[0].data || {};
+    state.leads = Array.isArray(data.leads) ? data.leads : [];
+    state.demo = { ...state.demo, ...(data.demo || {}) };
+    save();
+    renderAll();
+    setDbStatus(`Loaded shared workspace "${config.workspaceId}" from ${new Date(rows[0].updated_at).toLocaleString()}.`);
+  } catch (error) {
+    setDbStatus(`Load failed: ${error.message}`, true);
+  }
+}
+
+async function saveSharedState() {
+  const config = getDbConfig();
+  setDbStatus("Saving shared workspace...");
+  try {
+    await supabaseRequest("marketing_engine_states", {
+      method: "POST",
+      headers: { prefer: "resolution=merge-duplicates" },
+      body: JSON.stringify({
+        id: config.workspaceId,
+        data: { leads: state.leads, demo: state.demo },
+        updated_at: new Date().toISOString(),
+      }),
+    });
+    setDbStatus(`Saved shared workspace "${config.workspaceId}".`);
+  } catch (error) {
+    setDbStatus(`Save failed: ${error.message}`, true);
+  }
+}
+
+function importJsonFile(file) {
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      const imported = JSON.parse(String(reader.result || "{}"));
+      if (!Array.isArray(imported.leads)) throw new Error("Missing leads array.");
+      state.leads = imported.leads;
+      state.demo = { ...state.demo, ...(imported.demo || {}) };
+      save();
+      renderAll();
+      alert("Team campaign data imported.");
+    } catch (error) {
+      alert(`Import failed: ${error.message}`);
+    }
+  };
+  reader.readAsText(file);
+}
+
 function escapeHtml(value) {
   return String(value || "").replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[char]));
 }
@@ -488,6 +602,15 @@ function bindEvents() {
   $("statusFilter").addEventListener("change", renderLeads);
   $("seedLeadsBtn").addEventListener("click", seedLeads);
   $("exportJsonBtn").addEventListener("click", exportJson);
+  $("exportJsonBtnSecondary").addEventListener("click", exportJson);
+  $("saveDbConfigBtn").addEventListener("click", saveDbConfig);
+  $("loadSharedBtn").addEventListener("click", loadSharedState);
+  $("loadSharedBtnSecondary").addEventListener("click", loadSharedState);
+  $("saveSharedBtn").addEventListener("click", saveSharedState);
+  $("saveSharedBtnSecondary").addEventListener("click", saveSharedState);
+  $("importJsonBtn").addEventListener("click", () => $("importJsonInput").click());
+  $("importJsonBtnSecondary").addEventListener("click", () => $("importJsonInput").click());
+  $("importJsonInput").addEventListener("change", (event) => importJsonFile(event.target.files[0]));
   $("demoForm").addEventListener("submit", (event) => {
     event.preventDefault();
     readDemoForm();
@@ -537,3 +660,4 @@ function renderAll() {
 load();
 bindEvents();
 renderAll();
+fillDbConfigForm();

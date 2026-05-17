@@ -55,6 +55,8 @@
           </div>
           <div class="topbar-actions">
             <button id="seedLeadsBtn" class="ghost-btn" type="button">Load sample leads</button>
+            <button id="loadSharedBtn" class="ghost-btn" type="button">Load shared</button>
+            <button id="saveSharedBtn" class="primary-btn" type="button">Save shared</button>
             <button id="importJsonBtn" class="ghost-btn" type="button">Import team data</button>
             <button id="exportJsonBtn" class="primary-btn" type="button">Export data</button>
             <input id="importJsonInput" type="file" accept="application/json" hidden />
@@ -184,10 +186,49 @@
             </section>
             <section class="tool-panel">
               <div class="section-heading">
-                <p class="eyebrow">Team handoff</p>
-                <h3>Shared campaign file</h3>
+                <p class="eyebrow">Team database</p>
+                <h3>Supabase shared workspace</h3>
               </div>
-              <pre class="copy-box">Use Export data to create a campaign JSON file. Teammates can open this same browser app and use Import team data to load the shared CRM, demo, and outreach state.</pre>
+              <div class="form-grid">
+                <label>Supabase URL<input id="supabaseUrl" placeholder="https://project.supabase.co" /></label>
+                <label>Anon key<input id="supabaseAnonKey" placeholder="eyJhbGciOi..." /></label>
+                <label>Workspace ID<input id="workspaceId" placeholder="summit-team" /></label>
+              </div>
+              <p id="dbStatus" class="db-status">Not connected to shared database yet.</p>
+              <div class="button-row">
+                <button id="saveDbConfigBtn" class="primary-btn" type="button">Save database settings</button>
+                <button id="loadSharedBtnSecondary" class="ghost-btn" type="button">Load shared</button>
+                <button id="saveSharedBtnSecondary" class="ghost-btn" type="button">Save shared</button>
+              </div>
+              <pre class="copy-box schema-box">Create this table in Supabase SQL Editor:
+
+create table if not exists public.marketing_engine_states (
+  id text primary key,
+  data jsonb not null default '{}'::jsonb,
+  updated_at timestamptz not null default now()
+);
+
+alter table public.marketing_engine_states enable row level security;
+
+create policy "Allow shared browser reads"
+on public.marketing_engine_states for select
+using (true);
+
+create policy "Allow shared browser writes"
+on public.marketing_engine_states for insert
+with check (true);
+
+create policy "Allow shared browser updates"
+on public.marketing_engine_states for update
+using (true)
+with check (true);</pre>
+            </section>
+            <section class="tool-panel">
+              <div class="section-heading">
+                <p class="eyebrow">Backup</p>
+                <h3>Campaign file</h3>
+              </div>
+              <pre class="copy-box">Use Export data as a manual backup. Import team data can restore a campaign JSON file into this browser.</pre>
               <div class="button-row">
                 <button id="exportJsonBtnSecondary" class="primary-btn" type="button">Export data</button>
                 <button id="importJsonBtnSecondary" class="ghost-btn" type="button">Import team data</button>

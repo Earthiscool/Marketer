@@ -497,6 +497,21 @@ textarea {
   font-weight: 700;
 }
 
+.db-status {
+  min-height: 24px;
+  margin: 12px 0;
+  color: var(--muted);
+  font-size: 0.92rem;
+  font-weight: 750;
+}
+
+.schema-box {
+  min-height: 230px;
+  margin-top: 14px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-size: 0.82rem;
+}
+
 @media (max-width: 1040px) {
   .app-shell { grid-template-columns: 1fr; }
   .sidebar { position: static; }

@@ -46,6 +46,19 @@ http://localhost:5180/oauth2callback
 
 Secrets, Gmail tokens, local databases, generated PDFs, build output, and `node_modules` are intentionally ignored.
 
+## Shared Supabase Database
+
+The browser marketing engine supports Supabase sync for a shared team workspace.
+
+1. Create a free Supabase project.
+2. Open the Supabase SQL Editor.
+3. Run the SQL shown inside the app under **Exports -> Team database**.
+4. Copy the project URL and anon key from Supabase project settings.
+5. In the app, open **Exports -> Team database**, paste the URL/key, choose a workspace ID such as `summit-team`, then save settings.
+6. Use **Save shared** to write the current CRM/demo state and **Load shared** on teammate browsers.
+
+The anon key is safe to expose for browser apps, but the permissive demo policies in the app are intended for a private team workspace. Tighten RLS policies before storing sensitive client data.
+
 ## Deploy To Vercel
 
 The root project is configured with `vercel.json` for a static team-facing deployment:
