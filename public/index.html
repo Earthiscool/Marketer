@@ -3,56 +3,201 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Marketer</title>
-    <link rel="stylesheet" href="/launcher.css" />
+    <title>Summit Growth Studio</title>
+    <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
-    <main>
-      <section class="hero">
-        <p class="eyebrow">Summit Systems</p>
-        <h1>Marketer</h1>
-        <p class="lede">One team workspace for finding prospects, analyzing Gmail outcomes, generating personalized demos, and producing local-business audit reports.</p>
-      </section>
+    <main class="app-shell">
+      <aside class="sidebar">
+        <div class="brand-block">
+          <div class="brand-mark">S</div>
+          <div>
+            <p class="eyebrow">Summit Systems</p>
+            <h1>Growth Studio</h1>
+          </div>
+        </div>
 
-      <section class="tool-grid">
-        <article>
-          <p class="eyebrow">Demo + CRM</p>
-          <h2>Summit Growth Studio</h2>
-          <p>Lead tracker, custom business presentation builder, outreach copy, and short demo video generation.</p>
-          <a href="/growth-studio/index.html">Open tool</a>
-        </article>
+        <nav class="nav-tabs" aria-label="Workspace sections">
+          <button class="nav-tab active" data-view="crm">Lead Tracker</button>
+          <button class="nav-tab" data-view="demo">Demo Builder</button>
+          <button class="nav-tab" data-view="exports">Exports</button>
+        </nav>
 
-        <article>
-          <p class="eyebrow">Gmail Learning</p>
-          <h2>Gmail Growth Agent</h2>
-          <p>Reads Gmail with OAuth, detects replies and opened labels, then adjusts outreach strategy and drafts. Local/server deployment required for OAuth storage.</p>
-          <code>npm run gmail</code>
-        </article>
+        <section class="sidebar-panel">
+          <p class="panel-title">Today</p>
+          <div class="metric-grid">
+            <div>
+              <strong id="metricLeads">0</strong>
+              <span>leads</span>
+            </div>
+            <div>
+              <strong id="metricHot">0</strong>
+              <span>hot</span>
+            </div>
+            <div>
+              <strong id="metricFollowups">0</strong>
+              <span>follow-ups</span>
+            </div>
+          </div>
+        </section>
 
-        <article>
-          <p class="eyebrow">AI Planning</p>
-          <h2>Summit Marketing Agent</h2>
-          <p>Campaign strategy, prospect scoring, and outreach planning powered by a Next.js app.</p>
-          <code>npm run marketing-agent</code>
-        </article>
+        <section class="sidebar-panel">
+          <p class="panel-title">Best subject pattern</p>
+          <p class="small-copy">Question about [Business]’s website</p>
+        </section>
+      </aside>
 
-        <article>
-          <p class="eyebrow">Audit Engine</p>
-          <h2>Business Audit AI</h2>
-          <p>Python audit system for website, SEO, performance, competitors, reviews, social, funnel, and sales reports.</p>
-          <code>npm run audit-ai</code>
-        </article>
-      </section>
+      <section class="workspace">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">Local business acquisition</p>
+            <h2 id="viewTitle">Lead Tracker</h2>
+          </div>
+          <div class="topbar-actions">
+            <button id="seedLeadsBtn" class="ghost-btn" type="button">Load sample leads</button>
+            <button id="importJsonBtn" class="ghost-btn" type="button">Import team data</button>
+            <button id="exportJsonBtn" class="primary-btn" type="button">Export data</button>
+            <input id="importJsonInput" type="file" accept="application/json" hidden />
+          </div>
+        </header>
 
-      <section class="ops">
-        <h2>Team Workflow</h2>
-        <ol>
-          <li>Use Gmail Growth Agent to learn which messages and leads are working.</li>
-          <li>Use Growth Studio to create a personalized demo for high-intent prospects.</li>
-          <li>Use Business Audit AI for deeper website evidence and sales reports.</li>
-          <li>Use Marketing Agent to plan weekly outbound campaigns.</li>
-        </ol>
+        <section id="crmView" class="view active">
+          <div class="split-layout">
+            <form id="leadForm" class="tool-panel">
+              <div class="section-heading">
+                <p class="eyebrow">CRM</p>
+                <h3>Add or update a lead</h3>
+              </div>
+              <div class="form-grid">
+                <label>Business name<input id="leadName" required placeholder="Blue Skies Pottery" /></label>
+                <label>Website<input id="leadWebsite" placeholder="https://example.com" /></label>
+                <label>Email<input id="leadEmail" type="email" placeholder="owner@example.com" /></label>
+                <label>Industry<input id="leadIndustry" placeholder="salon, pottery, roofing..." /></label>
+                <label>Status
+                  <select id="leadStatus">
+                    <option>New</option>
+                    <option>Researched</option>
+                    <option>Contacted</option>
+                    <option>Opened</option>
+                    <option>Replied</option>
+                    <option>Meeting</option>
+                    <option>Won</option>
+                    <option>Not fit</option>
+                  </select>
+                </label>
+                <label>Next follow-up<input id="leadFollowup" type="date" /></label>
+              </div>
+              <label>Specific opportunity<textarea id="leadOpportunity" placeholder="Booking takes too many clicks; add AI intake and clearer CTA."></textarea></label>
+              <label>Notes<textarea id="leadNotes" placeholder="Owner name, context, objections, last message..."></textarea></label>
+              <div class="button-row">
+                <button class="primary-btn" type="submit">Save lead</button>
+                <button id="clearLeadBtn" class="ghost-btn" type="button">Clear</button>
+              </div>
+            </form>
+
+            <section class="tool-panel">
+              <div class="section-heading">
+                <p class="eyebrow">Pipeline</p>
+                <h3>Prioritized leads</h3>
+              </div>
+              <div class="filters">
+                <input id="leadSearch" placeholder="Search leads..." />
+                <select id="statusFilter">
+                  <option value="All">All statuses</option>
+                  <option>New</option>
+                  <option>Researched</option>
+                  <option>Contacted</option>
+                  <option>Opened</option>
+                  <option>Replied</option>
+                  <option>Meeting</option>
+                  <option>Won</option>
+                  <option>Not fit</option>
+                </select>
+              </div>
+              <div id="leadList" class="lead-list"></div>
+            </section>
+          </div>
+        </section>
+
+        <section id="demoView" class="view">
+          <div class="split-layout wide-left">
+            <form id="demoForm" class="tool-panel">
+              <div class="section-heading">
+                <p class="eyebrow">Demo builder</p>
+                <h3>Generate a custom sales deck</h3>
+              </div>
+              <div class="form-grid">
+                <label>Business name<input id="demoName" required placeholder="Mane Techniques" /></label>
+                <label>Website<input id="demoWebsite" placeholder="https://manetechniques.com" /></label>
+                <label>Industry<input id="demoIndustry" placeholder="hair salon" /></label>
+                <label>Primary goal
+                  <select id="demoGoal">
+                    <option>More booked appointments</option>
+                    <option>More quote requests</option>
+                    <option>More phone calls</option>
+                    <option>More online orders</option>
+                    <option>Better Google visibility</option>
+                  </select>
+                </label>
+              </div>
+              <label>What you noticed<textarea id="demoObservation" placeholder="The website has service info, but the booking path could be faster and the FAQ could answer common questions automatically."></textarea></label>
+              <label>Recommended build<textarea id="demoBuild" placeholder="AI website assistant, booking guidance, service pages, analytics dashboard, and faster call-to-action flow."></textarea></label>
+              <div class="button-row">
+                <button class="primary-btn" type="submit">Generate demo</button>
+                <button id="saveDemoLeadBtn" class="ghost-btn" type="button">Save as lead</button>
+              </div>
+            </form>
+
+            <section class="demo-stage">
+              <div class="deck-toolbar">
+                <button id="prevSlideBtn" class="icon-btn" type="button" aria-label="Previous slide">‹</button>
+                <span id="slideCounter">1 / 5</span>
+                <button id="nextSlideBtn" class="icon-btn" type="button" aria-label="Next slide">›</button>
+                <button id="printDeckBtn" class="ghost-btn" type="button">Print deck</button>
+                <button id="recordVideoBtn" class="primary-btn" type="button">Record video</button>
+              </div>
+              <p id="videoStatus" class="video-status"></p>
+              <article id="deck" class="deck" aria-live="polite"></article>
+              <canvas id="videoCanvas" width="1280" height="720" hidden></canvas>
+              <a id="videoDownload" class="download-link" hidden>Download video</a>
+            </section>
+          </div>
+        </section>
+
+        <section id="exportsView" class="view">
+          <div class="exports-grid">
+            <section class="tool-panel">
+              <div class="section-heading">
+                <p class="eyebrow">Outreach</p>
+                <h3>Generated email</h3>
+              </div>
+              <pre id="emailOutput" class="copy-box"></pre>
+              <button id="copyEmailBtn" class="primary-btn" type="button">Copy email</button>
+            </section>
+            <section class="tool-panel">
+              <div class="section-heading">
+                <p class="eyebrow">Follow-up</p>
+                <h3>Next message</h3>
+              </div>
+              <pre id="followupOutput" class="copy-box"></pre>
+              <button id="copyFollowupBtn" class="primary-btn" type="button">Copy follow-up</button>
+            </section>
+            <section class="tool-panel">
+              <div class="section-heading">
+                <p class="eyebrow">Team handoff</p>
+                <h3>Shared campaign file</h3>
+              </div>
+              <pre class="copy-box">Use Export data to create a campaign JSON file. Teammates can open this same browser app and use Import team data to load the shared CRM, demo, and outreach state.</pre>
+              <div class="button-row">
+                <button id="exportJsonBtnSecondary" class="primary-btn" type="button">Export data</button>
+                <button id="importJsonBtnSecondary" class="ghost-btn" type="button">Import team data</button>
+              </div>
+            </section>
+          </div>
+        </section>
       </section>
     </main>
+
+    <script src="app.js"></script>
   </body>
 </html>
