@@ -15,7 +15,7 @@ const defaultDemo = {
   build: "AI assistant, stronger service pages, cleaner calls to action, and a simple owner dashboard.",
 };
 
-const state = { leads: [], selectedId: null, activeSlide: 0, demo: { ...defaultDemo } };
+const state = { leads: [], selectedId: null, activeSlide: 0, demo: { ...defaultDemo }, events: [] };
 let isHydrating = false;
 let autosaveTimer = null;
 let lastSavedHash = "";
@@ -97,6 +97,8 @@ async function loadShared() {
     lastSavedHash = payloadHash();
     renderAll();
     setSync(`Synced ${config.workspaceId} at ${new Date(rows[0].updated_at).toLocaleTimeString()}`, "ok");
+    loadEvents(false);
+    logEvent("workspace_loaded", "Workspace loaded from database", { leadCount: state.leads.length }, "workspace", config.workspaceId);
   } catch (error) { isHydrating = false; setSync(`Sync failed: ${error.message}`, "bad"); }
 }
 
@@ -113,7 +115,45 @@ async function saveShared(silent = false, force = false) {
     });
     lastSavedHash = hash;
     setSync(`Autosaved ${config.workspaceId} at ${new Date().toLocaleTimeString()}`, "ok");
+    logEvent(silent ? "workspace_autosaved" : "workspace_synced", silent ? "Workspace autosaved" : "Workspace manually synced", { leadCount: state.leads.length }, "workspace", config.workspaceId);
   } catch (error) { setSync(`Autosave failed: ${error.message}`, "bad"); }
+}
+
+async function logEvent(eventType, summary, data = {}, entityType = "workspace", entityId = "") {
+  const config = getDbConfig();
+  const event = {
+    id: uid(),
+    workspace_id: config.workspaceId,
+    event_type: eventType,
+    entity_type: entityType,
+    entity_id: entityId || null,
+    summary,
+    data,
+    created_at: todayIso(),
+  };
+  state.events = [event, ...state.events].slice(0, 80);
+  renderEvents();
+  try {
+    await supabaseRequest("marketing_engine_events", {
+      method: "POST",
+      headers: { prefer: "return=minimal" },
+      body: JSON.stringify(event),
+    });
+  } catch (error) {
+    console.warn("Activity log failed", error);
+  }
+}
+
+async function loadEvents(showStatus = true) {
+  const config = getDbConfig();
+  try {
+    const rows = await supabaseRequest(`marketing_engine_events?workspace_id=eq.${encodeURIComponent(config.workspaceId)}&select=id,workspace_id,event_type,entity_type,entity_id,summary,data,created_at&order=created_at.desc&limit=100`);
+    state.events = Array.isArray(rows) ? rows : [];
+    renderEvents();
+    if (showStatus) setSync(`Loaded activity for ${config.workspaceId}`, "ok");
+  } catch (error) {
+    if (showStatus) setSync(`Activity load failed: ${error.message}`, "bad");
+  }
 }
 
 function scoreLead(lead) {
@@ -131,6 +171,7 @@ function selectedLead() { return state.leads.find((lead) => lead.id === state.se
 function blankLead() {
   const lead = { id: uid(), name: "Untitled business", website: "", email: "", industry: "", status: "New", followup: "", opportunity: "", notes: "", updatedAt: todayIso() };
   state.leads.unshift(lead); state.selectedId = lead.id; hydrateFromLead(lead); persistLocal(); renderAll();
+  logEvent("lead_created", `Created lead: ${lead.name}`, { lead }, "lead", lead.id);
 }
 
 function hydrateFromLead(lead) {
@@ -143,15 +184,19 @@ function saveLead(event) {
   const id = state.selectedId || uid();
   const lead = { id, name: $("leadName").value.trim() || "Untitled business", website: normalizeUrl($("leadWebsite").value.trim()), email: $("leadEmail").value.trim(), industry: $("leadIndustry").value.trim(), status: $("leadStatus").value, followup: $("leadFollowup").value, opportunity: $("leadOpportunity").value.trim(), notes: $("leadNotes").value.trim(), updatedAt: todayIso() };
   const i = state.leads.findIndex((item) => item.id === id);
+  const previous = i >= 0 ? state.leads[i] : null;
   if (i >= 0) state.leads[i] = lead; else state.leads.unshift(lead);
   state.selectedId = id; hydrateFromLead(lead); persistLocal(); renderAll();
+  logEvent(previous ? "lead_updated" : "lead_created", `${previous ? "Updated" : "Created"} lead: ${lead.name}`, { before: previous, after: lead }, "lead", lead.id);
 }
 
 function deleteLead() {
   if (!state.selectedId) return;
+  const deleted = selectedLead();
   state.leads = state.leads.filter((lead) => lead.id !== state.selectedId);
   state.selectedId = state.leads[0]?.id || null;
   persistLocal(); renderAll();
+  logEvent("lead_deleted", `Deleted lead: ${deleted?.name || "Unknown lead"}`, { lead: deleted }, "lead", deleted?.id || "");
 }
 
 function filteredLeads() {
@@ -213,7 +258,7 @@ function renderDeck() {
 function showSlide(i) { const slides = [...document.querySelectorAll(".slide")]; if (!slides.length) return; state.activeSlide = (i + slides.length) % slides.length; slides.forEach((s, idx) => s.classList.toggle("active", idx === state.activeSlide)); $("slideCounter").textContent = `${state.activeSlide + 1} / ${slides.length}`; }
 
 function exportJson() { const blob = new Blob([JSON.stringify(sharedPayload(), null, 2)], { type: "application/json" }); const url = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = url; a.download = "marketer-crm-backup.json"; a.click(); URL.revokeObjectURL(url); }
-function importJsonFile(file) { if (!file) return; const reader = new FileReader(); reader.onload = () => { try { const data = JSON.parse(String(reader.result || "{}")); state.leads = Array.isArray(data.leads) ? data.leads : []; state.selectedId = data.selectedId || state.leads[0]?.id || null; state.demo = { ...defaultDemo, ...(data.demo || {}) }; persistLocal(); renderAll(); } catch (e) { setSync(`Import failed: ${e.message}`, "bad"); } }; reader.readAsText(file); }
+function importJsonFile(file) { if (!file) return; const reader = new FileReader(); reader.onload = () => { try { const data = JSON.parse(String(reader.result || "{}")); state.leads = Array.isArray(data.leads) ? data.leads : []; state.selectedId = data.selectedId || state.leads[0]?.id || null; state.demo = { ...defaultDemo, ...(data.demo || {}) }; persistLocal(); renderAll(); logEvent("backup_imported", `Imported backup with ${state.leads.length} leads`, { leadCount: state.leads.length }, "workspace", getDbConfig().workspaceId); } catch (e) { setSync(`Import failed: ${e.message}`, "bad"); } }; reader.readAsText(file); }
 function copyText(id) { navigator.clipboard.writeText($(id).textContent); }
 
 async function recordVideo() {
@@ -227,18 +272,24 @@ async function recordVideo() {
   status.textContent = "Recording 10 second demo..."; setTimeout(() => { clearInterval(interval); recorder.stop(); }, 10000);
 }
 
-function saveDbConfig() { localStorage.setItem(DB_CONFIG_KEY, JSON.stringify({ url: $("supabaseUrl").value.trim(), anonKey: $("supabaseAnonKey").value.trim(), workspaceId: $("workspaceId").value.trim() || "summit-team" })); setSync("Database settings saved. Reloading shared workspace..."); loadShared(); }
+function saveDbConfig() { const workspaceId = $("workspaceId").value.trim() || "summit-team"; localStorage.setItem(DB_CONFIG_KEY, JSON.stringify({ url: $("supabaseUrl").value.trim(), anonKey: $("supabaseAnonKey").value.trim(), workspaceId })); setSync("Database settings saved. Reloading shared workspace..."); logEvent("database_settings_updated", "Updated database settings", { workspaceId }, "workspace", workspaceId); loadShared(); }
 function fillSettings() { const c = getDbConfig(); $("supabaseUrl").value = c.url; $("supabaseAnonKey").value = c.anonKey; $("workspaceId").value = c.workspaceId; }
 
-function renderAll() { renderMetrics(); renderRows(); renderDetail(); fillDemoForm(); renderOutreach(); renderDeck(); }
+function renderEvents() {
+  const target = $("activityList");
+  if (!target) return;
+  target.innerHTML = state.events.length ? state.events.map((event) => `<article class="activity-item"><div><strong>${esc(event.summary)}</strong><span>${esc(event.event_type)} · ${esc(event.entity_type)}</span></div><time>${new Date(event.created_at).toLocaleString()}</time></article>`).join("") : `<article class="empty-activity">No activity logged yet.</article>`;
+}
+
+function renderAll() { renderMetrics(); renderRows(); renderDetail(); fillDemoForm(); renderOutreach(); renderDeck(); renderEvents(); }
 
 function bindEvents() {
   document.querySelectorAll(".rail-btn").forEach((btn) => btn.addEventListener("click", () => { document.querySelectorAll(".rail-btn").forEach((b) => b.classList.remove("active")); document.querySelectorAll(".view").forEach((v) => v.classList.remove("active")); btn.classList.add("active"); $(`${btn.dataset.view}View`).classList.add("active"); }));
   $("newLeadBtn").addEventListener("click", blankLead); $("syncNowBtn").addEventListener("click", () => saveShared(false, true)); $("searchInput").addEventListener("input", renderRows); $("statusFilter").addEventListener("change", renderRows); $("leadForm").addEventListener("submit", saveLead); $("deleteLeadBtn").addEventListener("click", deleteLead);
   $("leadRows").addEventListener("click", (e) => { const tr = e.target.closest("tr[data-id]"); if (!tr) return; state.selectedId = tr.dataset.id; hydrateFromLead(selectedLead()); persistLocal(); renderAll(); });
-  $("demoForm").addEventListener("submit", (e) => { e.preventDefault(); readDemoForm(); renderAll(); }); $("prevSlideBtn").addEventListener("click", () => showSlide(state.activeSlide - 1)); $("nextSlideBtn").addEventListener("click", () => showSlide(state.activeSlide + 1)); $("printDeckBtn").addEventListener("click", () => window.print()); $("recordVideoBtn").addEventListener("click", recordVideo);
-  $("copyEmailBtn").addEventListener("click", () => copyText("emailOutput")); $("copyFollowupBtn").addEventListener("click", () => copyText("followupOutput")); $("markContactedBtn").addEventListener("click", () => { const lead = selectedLead(); if (!lead) return; lead.status = "Contacted"; persistLocal(); renderAll(); });
-  $("saveDbConfigBtn").addEventListener("click", saveDbConfig); $("loadSharedBtn").addEventListener("click", loadShared); $("exportJsonBtn").addEventListener("click", exportJson); $("importJsonBtn").addEventListener("click", () => $("importJsonInput").click()); $("importJsonInput").addEventListener("change", (e) => importJsonFile(e.target.files[0]));
+  $("demoForm").addEventListener("submit", (e) => { e.preventDefault(); readDemoForm(); renderAll(); logEvent("demo_updated", `Updated demo for ${state.demo.businessName}`, { demo: state.demo }, "demo", state.selectedId || ""); }); $("prevSlideBtn").addEventListener("click", () => showSlide(state.activeSlide - 1)); $("nextSlideBtn").addEventListener("click", () => showSlide(state.activeSlide + 1)); $("printDeckBtn").addEventListener("click", () => window.print()); $("recordVideoBtn").addEventListener("click", () => { recordVideo(); logEvent("demo_video_recorded", `Recorded demo video for ${state.demo.businessName || "selected lead"}`, { demo: state.demo }, "demo", state.selectedId || ""); });
+  $("copyEmailBtn").addEventListener("click", () => { copyText("emailOutput"); logEvent("email_copied", `Copied outreach email for ${selectedLead()?.name || "selected lead"}`, { lead: selectedLead() }, "lead", state.selectedId || ""); }); $("copyFollowupBtn").addEventListener("click", () => { copyText("followupOutput"); logEvent("followup_copied", `Copied follow-up for ${selectedLead()?.name || "selected lead"}`, { lead: selectedLead() }, "lead", state.selectedId || ""); }); $("markContactedBtn").addEventListener("click", () => { const lead = selectedLead(); if (!lead) return; const before = { ...lead }; lead.status = "Contacted"; persistLocal(); renderAll(); logEvent("status_changed", `Marked ${lead.name} contacted`, { before, after: lead }, "lead", lead.id); });
+  $("saveDbConfigBtn").addEventListener("click", saveDbConfig); $("loadSharedBtn").addEventListener("click", loadShared); $("refreshActivityBtn").addEventListener("click", () => loadEvents(true)); $("exportJsonBtn").addEventListener("click", () => { exportJson(); logEvent("backup_exported", `Exported backup with ${state.leads.length} leads`, { leadCount: state.leads.length }, "workspace", getDbConfig().workspaceId); }); $("importJsonBtn").addEventListener("click", () => $("importJsonInput").click()); $("importJsonInput").addEventListener("change", (e) => importJsonFile(e.target.files[0]));
 }
 
 loadLocal(); bindEvents(); fillSettings(); renderAll(); setTimeout(loadShared, 250);

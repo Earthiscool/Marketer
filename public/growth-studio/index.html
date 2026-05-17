@@ -14,6 +14,7 @@
           <button class="rail-btn active" data-view="pipeline" title="Pipeline">P</button>
           <button class="rail-btn" data-view="outreach" title="Outreach">O</button>
           <button class="rail-btn" data-view="demo" title="Demo">D</button>
+          <button class="rail-btn" data-view="activity" title="Activity">A</button>
           <button class="rail-btn" data-view="settings" title="Settings">S</button>
         </nav>
       </aside>
@@ -103,6 +104,13 @@
           </div>
         </section>
 
+        <section id="activityView" class="view">
+          <section class="panel">
+            <div class="panel-head"><h2>Activity log</h2><button id="refreshActivityBtn" class="secondary">Refresh</button></div>
+            <div id="activityList" class="activity-list"></div>
+          </section>
+        </section>
+
         <section id="settingsView" class="view">
           <div class="workspace-grid">
             <section class="panel">
@@ -130,7 +138,23 @@ alter table public.marketing_engine_states enable row level security;
 
 create policy "Allow shared browser reads" on public.marketing_engine_states for select using (true);
 create policy "Allow shared browser writes" on public.marketing_engine_states for insert with check (true);
-create policy "Allow shared browser updates" on public.marketing_engine_states for update using (true) with check (true);</pre>
+create policy "Allow shared browser updates" on public.marketing_engine_states for update using (true) with check (true);
+
+create table if not exists public.marketing_engine_events (
+  id uuid primary key default gen_random_uuid(),
+  workspace_id text not null,
+  event_type text not null,
+  entity_type text not null default 'workspace',
+  entity_id text,
+  summary text not null,
+  data jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now()
+);
+
+alter table public.marketing_engine_events enable row level security;
+
+create policy "Allow shared event reads" on public.marketing_engine_events for select using (true);
+create policy "Allow shared event writes" on public.marketing_engine_events for insert with check (true);</pre>
             </section>
           </div>
         </section>
