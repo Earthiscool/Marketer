@@ -1,29 +1,32 @@
-const STORAGE_KEY = "summit_growth_studio_v1";
-const DB_CONFIG_KEY = "summit_growth_studio_supabase_v1";
+const STORAGE_KEY = "marketer_crm_state_v2";
+const DB_CONFIG_KEY = "marketer_supabase_config_v2";
 const DEFAULT_DB_CONFIG = {
   url: "https://wfnkfuxyfblocbinsbaj.supabase.co",
   anonKey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndmbmtmdXh5ZmJsb2NiaW5zYmFqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg5ODMxNjcsImV4cCI6MjA5NDU1OTE2N30.56o_zJbkLfTziOgUUSGaL1oqleIC_mHctmn_fuK1DBk",
   workspaceId: "summit-team",
 };
 
-const state = {
-  leads: [],
-  editingId: null,
-  activeSlide: 0,
-  demo: {
-    businessName: "Mane Techniques",
-    website: "https://manetechniques.com",
-    industry: "hair salon",
-    goal: "More booked appointments",
-    observation: "The website has service info, but the booking path could be faster and common customer questions could be answered automatically.",
-    build: "AI website assistant, booking guidance, service pages, analytics dashboard, and a faster call-to-action flow.",
-  },
+const defaultDemo = {
+  businessName: "",
+  website: "",
+  industry: "local business",
+  goal: "More booked appointments",
+  observation: "The current customer path could be clearer and faster.",
+  build: "AI assistant, stronger service pages, cleaner calls to action, and a simple owner dashboard.",
 };
 
-const $ = (id) => document.getElementById(id);
+const state = { leads: [], selectedId: null, activeSlide: 0, demo: { ...defaultDemo } };
 let isHydrating = false;
 let autosaveTimer = null;
 let lastSavedHash = "";
+
+const $ = (id) => document.getElementById(id);
+const statuses = ["New", "Researched", "Contacted", "Opened", "Replied", "Meeting", "Won", "Not fit"];
+
+function uid() { return crypto.randomUUID ? crypto.randomUUID() : String(Date.now() + Math.random()); }
+function todayIso() { return new Date().toISOString(); }
+function normalizeUrl(value) { if (!value) return ""; return /^https?:\/\//i.test(value) ? value : `https://${value}`; }
+function esc(value) { return String(value || "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
 
 function getDbConfig() {
   try {
@@ -33,669 +36,209 @@ function getDbConfig() {
       anonKey: String(config.anonKey || DEFAULT_DB_CONFIG.anonKey),
       workspaceId: String(config.workspaceId || DEFAULT_DB_CONFIG.workspaceId).trim() || DEFAULT_DB_CONFIG.workspaceId,
     };
-  } catch {
-    return DEFAULT_DB_CONFIG;
-  }
+  } catch { return DEFAULT_DB_CONFIG; }
 }
 
-function setDbStatus(message, isError = false) {
-  const el = $("dbStatus");
+function setSync(message, tone = "") {
+  const el = $("syncStatus");
   if (!el) return;
   el.textContent = message;
-  el.style.color = isError ? "#bd3b3b" : "";
-}
-
-function fillDbConfigForm() {
-  const config = getDbConfig();
-  if ($("supabaseUrl")) $("supabaseUrl").value = config.url;
-  if ($("supabaseAnonKey")) $("supabaseAnonKey").value = config.anonKey;
-  if ($("workspaceId")) $("workspaceId").value = config.workspaceId;
-  if (config.url && config.anonKey) setDbStatus(`Ready to sync workspace "${config.workspaceId}".`);
-}
-
-function saveDbConfig() {
-  const config = {
-    url: $("supabaseUrl").value.trim().replace(/\/+$/, ""),
-    anonKey: $("supabaseAnonKey").value.trim(),
-    workspaceId: $("workspaceId").value.trim() || "summit-team",
-  };
-  localStorage.setItem(DB_CONFIG_KEY, JSON.stringify(config));
-  setDbStatus(`Saved database settings for workspace "${config.workspaceId}".`);
+  el.dataset.tone = tone;
 }
 
 async function supabaseRequest(path, options = {}) {
   const config = getDbConfig();
-  if (!config.url || !config.anonKey) throw new Error("Add Supabase URL and anon key first.");
+  if (!config.url || !config.anonKey) throw new Error("Missing Supabase config.");
   const res = await fetch(`${config.url}/rest/v1/${path}`, {
     ...options,
-    headers: {
-      apikey: config.anonKey,
-      authorization: `Bearer ${config.anonKey}`,
-      "content-type": "application/json",
-      ...(options.headers || {}),
-    },
+    headers: { apikey: config.anonKey, authorization: `Bearer ${config.anonKey}`, "content-type": "application/json", ...(options.headers || {}) },
   });
-  if (!res.ok) throw new Error(await res.text());
   const text = await res.text();
-  if (!text) return null;
-  return JSON.parse(text);
+  if (!res.ok) throw new Error(text || `${res.status} ${res.statusText}`);
+  return text ? JSON.parse(text) : null;
 }
 
-function save() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify({ leads: state.leads, demo: state.demo }));
-  scheduleSharedAutosave();
+function persistLocal() {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify({ leads: state.leads, selectedId: state.selectedId, demo: state.demo }));
+  scheduleAutosave();
 }
 
-function load() {
-  const saved = localStorage.getItem(STORAGE_KEY);
-  if (!saved) return;
+function loadLocal() {
   try {
-    const parsed = JSON.parse(saved);
-    state.leads = Array.isArray(parsed.leads) ? parsed.leads : [];
-    state.demo = { ...state.demo, ...(parsed.demo || {}) };
-  } catch {
-    state.leads = [];
-  }
+    const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}");
+    state.leads = Array.isArray(saved.leads) ? saved.leads : [];
+    state.selectedId = saved.selectedId || state.leads[0]?.id || null;
+    state.demo = { ...defaultDemo, ...(saved.demo || {}) };
+  } catch { state.leads = []; }
 }
 
-function scoreLead(lead) {
-  let score = 35;
-  const text = `${lead.name} ${lead.industry} ${lead.opportunity} ${lead.notes}`.toLowerCase();
-  if (lead.website) score += 8;
-  if (/booking|appointment|quote|call|lead|customer|seo|website|slow|outdated|chatbot|ai/.test(text)) score += 24;
-  if (/opened|replied|meeting|won/i.test(lead.status)) score += 25;
-  if (/specific|owner|demo|follow/.test(text)) score += 8;
-  return Math.min(100, score);
-}
+function sharedPayload() { return { leads: state.leads, selectedId: state.selectedId, demo: state.demo }; }
+function payloadHash() { return JSON.stringify(sharedPayload()); }
 
-function formatUrl(url) {
-  if (!url) return "";
-  return /^https?:\/\//i.test(url) ? url : `https://${url}`;
-}
-
-function getLeadForm() {
-  return {
-    id: state.editingId || crypto.randomUUID(),
-    name: $("leadName").value.trim(),
-    website: formatUrl($("leadWebsite").value.trim()),
-    email: $("leadEmail").value.trim(),
-    industry: $("leadIndustry").value.trim(),
-    status: $("leadStatus").value,
-    followup: $("leadFollowup").value,
-    opportunity: $("leadOpportunity").value.trim(),
-    notes: $("leadNotes").value.trim(),
-    updatedAt: new Date().toISOString(),
-  };
-}
-
-function fillLeadForm(lead) {
-  state.editingId = lead.id;
-  $("leadName").value = lead.name || "";
-  $("leadWebsite").value = lead.website || "";
-  $("leadEmail").value = lead.email || "";
-  $("leadIndustry").value = lead.industry || "";
-  $("leadStatus").value = lead.status || "New";
-  $("leadFollowup").value = lead.followup || "";
-  $("leadOpportunity").value = lead.opportunity || "";
-  $("leadNotes").value = lead.notes || "";
-}
-
-function clearLeadForm() {
-  state.editingId = null;
-  $("leadForm").reset();
-  $("leadStatus").value = "New";
-}
-
-function saveLead(event) {
-  event.preventDefault();
-  const lead = getLeadForm();
-  if (!lead.name) return;
-  const index = state.leads.findIndex((item) => item.id === lead.id);
-  if (index >= 0) state.leads[index] = lead;
-  else state.leads.unshift(lead);
-  clearLeadForm();
-  save();
-  renderAll();
-}
-
-function statusClass(score) {
-  if (score >= 75) return "score-hot";
-  if (score < 50) return "score-cold";
-  return "";
-}
-
-function renderLeads() {
-  const query = $("leadSearch").value.toLowerCase();
-  const status = $("statusFilter").value;
-  const list = $("leadList");
-  const leads = state.leads
-    .map((lead) => ({ ...lead, score: scoreLead(lead) }))
-    .filter((lead) => status === "All" || lead.status === status)
-    .filter((lead) => `${lead.name} ${lead.website} ${lead.email} ${lead.industry} ${lead.opportunity}`.toLowerCase().includes(query))
-    .sort((a, b) => b.score - a.score);
-
-  if (!leads.length) {
-    list.innerHTML = `<div class="lead-card"><p>No leads yet. Add one or load samples.</p></div>`;
-    return;
-  }
-
-  list.innerHTML = leads.map((lead) => `
-    <article class="lead-card">
-      <header>
-        <div>
-          <h4>${escapeHtml(lead.name)}</h4>
-          <span class="pill ${statusClass(lead.score)}">${lead.score} score</span>
-          <span class="pill">${escapeHtml(lead.status)}</span>
-        </div>
-        <span class="pill">${escapeHtml(lead.industry || "local business")}</span>
-      </header>
-      <p>${escapeHtml(lead.opportunity || "Add a specific opportunity before outreach.")}</p>
-      <p>${lead.website ? `<a href="${escapeAttr(lead.website)}" target="_blank" rel="noreferrer">${escapeHtml(lead.website)}</a>` : "No website saved"} ${lead.email ? ` · ${escapeHtml(lead.email)}` : ""}</p>
-      <div class="lead-actions">
-        <button type="button" data-action="edit" data-id="${lead.id}">Edit</button>
-        <button type="button" data-action="demo" data-id="${lead.id}">Build demo</button>
-        <button type="button" data-action="opened" data-id="${lead.id}">Mark opened</button>
-        <button type="button" data-action="delete" data-id="${lead.id}">Delete</button>
-      </div>
-    </article>
-  `).join("");
-}
-
-function renderMetrics() {
-  const hot = state.leads.filter((lead) => scoreLead(lead) >= 75).length;
-  const today = new Date().toISOString().slice(0, 10);
-  const followups = state.leads.filter((lead) => lead.followup && lead.followup <= today && !["Won", "Not fit"].includes(lead.status)).length;
-  $("metricLeads").textContent = state.leads.length;
-  $("metricHot").textContent = hot;
-  $("metricFollowups").textContent = followups;
-}
-
-function readDemoForm() {
-  state.demo = {
-    businessName: $("demoName").value.trim() || "Local Business",
-    website: formatUrl($("demoWebsite").value.trim()),
-    industry: $("demoIndustry").value.trim() || "local business",
-    goal: $("demoGoal").value,
-    observation: $("demoObservation").value.trim() || "The current customer journey can be made faster, clearer, and easier to act on.",
-    build: $("demoBuild").value.trim() || "AI assistant, clearer conversion path, stronger service pages, and analytics.",
-  };
-  save();
-}
-
-function fillDemoForm() {
-  $("demoName").value = state.demo.businessName;
-  $("demoWebsite").value = state.demo.website;
-  $("demoIndustry").value = state.demo.industry;
-  $("demoGoal").value = state.demo.goal;
-  $("demoObservation").value = state.demo.observation;
-  $("demoBuild").value = state.demo.build;
-}
-
-function renderDeck() {
-  const d = state.demo;
-  const slides = [
-    `<section class="slide">
-      <div>
-        <p class="eyebrow">Custom growth demo</p>
-        <h3 class="slide-title">${escapeHtml(d.businessName)} can turn more visitors into customers.</h3>
-        <p class="slide-subtitle">A focused AI website assistant and clearer conversion flow built around ${escapeHtml(d.goal.toLowerCase())}.</p>
-      </div>
-      <div class="visual-grid">
-        <div class="mock-browser">
-          <div class="browser-bar"><span></span><span></span><span></span></div>
-          <div class="mock-hero"><h4>${escapeHtml(d.businessName)}</h4><p>${escapeHtml(d.goal)}</p><span class="mock-button">Book / Contact</span></div>
-        </div>
-        <div class="proof-card"><strong>What we noticed</strong><p>${escapeHtml(d.observation)}</p></div>
-      </div>
-    </section>`,
-    `<section class="slide">
-      <div>
-        <p class="eyebrow">Customer path</p>
-        <h3 class="slide-title">Make the next step obvious in under 10 seconds.</h3>
-        <p class="slide-subtitle">The build should guide people from question to action without making them hunt through pages.</p>
-      </div>
-      <div class="journey-row">
-        <div class="journey-card"><strong>Discover</strong><p>Google, social, referral, or direct site visit.</p></div>
-        <div class="journey-card"><strong>Understand</strong><p>Services, trust signals, pricing context, availability.</p></div>
-        <div class="journey-card"><strong>Ask</strong><p>AI assistant answers common questions instantly.</p></div>
-        <div class="journey-card"><strong>Act</strong><p>Book, call, request quote, or submit intake.</p></div>
-      </div>
-    </section>`,
-    `<section class="slide">
-      <div>
-        <p class="eyebrow">AI assistant concept</p>
-        <h3 class="slide-title">A 24/7 front desk for ${escapeHtml(d.businessName)}.</h3>
-      </div>
-      <div class="visual-grid">
-        <div class="mock-phone">
-          <div class="chat-bubble">Hi, what can I help you find?</div>
-          <div class="chat-bubble user">Do you have openings this week?</div>
-          <div class="chat-bubble">Yes. I can show the best next options and collect the details needed before booking.</div>
-          <div class="chat-bubble user">Can I see services?</div>
-          <div class="chat-bubble">Here are the recommended services for your goal.</div>
-        </div>
-        <ul class="deck-list">
-          <li>Answers repeat questions before the owner has to respond.</li>
-          <li>Routes serious customers toward the right next action.</li>
-          <li>Captures intent, service interest, and contact details.</li>
-          <li>Gives you better follow-up data than a basic contact form.</li>
-        </ul>
-      </div>
-    </section>`,
-    `<section class="slide">
-      <div>
-        <p class="eyebrow">Recommended build</p>
-        <h3 class="slide-title">What I would build first.</h3>
-        <p class="slide-subtitle">${escapeHtml(d.build)}</p>
-      </div>
-      <ul class="deck-list">
-        <li><strong>Conversion homepage:</strong> clearer headline, trust proof, service paths, and primary CTA.</li>
-        <li><strong>AI intake assistant:</strong> answers questions and qualifies visitors by need.</li>
-        <li><strong>Service pages:</strong> stronger Google visibility for high-intent searches.</li>
-        <li><strong>Owner dashboard:</strong> leads, common questions, and conversion activity in one place.</li>
-      </ul>
-    </section>`,
-    `<section class="slide">
-      <div>
-        <p class="eyebrow">Next step</p>
-        <h3 class="slide-title">A short demo call is enough to validate fit.</h3>
-        <p class="slide-subtitle">If this looks useful, the next step is a 15 minute call to confirm goals, pages, services, and the fastest launch path.</p>
-      </div>
-      <div class="visual-grid">
-        <div class="proof-card"><strong>No service fee</strong><p>Client covers domain and hosting. Finished code and assets belong to the client.</p></div>
-        <div class="proof-card"><strong>Fast pilot</strong><p>Start with the smallest useful version: lead capture, AI FAQ, and conversion-focused page flow.</p></div>
-      </div>
-    </section>`,
-  ];
-  $("deck").innerHTML = slides.join("");
-  showSlide(Math.min(state.activeSlide, slides.length - 1));
-  renderOutreach();
-}
-
-function showSlide(index) {
-  const slides = [...document.querySelectorAll(".slide")];
-  state.activeSlide = (index + slides.length) % slides.length;
-  slides.forEach((slide, i) => slide.classList.toggle("active", i === state.activeSlide));
-  $("slideCounter").textContent = `${state.activeSlide + 1} / ${slides.length}`;
-}
-
-function renderOutreach() {
-  const d = state.demo;
-  $("emailOutput").textContent = `Subject: Question about ${d.businessName}'s website
-
-Hi,
-
-I was looking at ${d.businessName}${d.website ? ` (${d.website})` : ""} and noticed this:
-
-${d.observation}
-
-I build AI websites and customer intake tools for local businesses, and I made a short demo concept for how ${d.businessName} could get ${d.goal.toLowerCase()}.
-
-Would you be open to seeing the 60-second version?`;
-
-  $("followupOutput").textContent = `Subject: Re: Question about ${d.businessName}'s website
-
-Quick follow-up in case this got buried.
-
-The main idea is simple: ${d.build}
-
-Should I send over the demo page I mocked up for ${d.businessName}?`;
-}
-
-function saveDemoAsLead() {
-  readDemoForm();
-  const lead = {
-    id: crypto.randomUUID(),
-    name: state.demo.businessName,
-    website: state.demo.website,
-    email: "",
-    industry: state.demo.industry,
-    status: "Researched",
-    followup: "",
-    opportunity: state.demo.observation,
-    notes: `Recommended build: ${state.demo.build}`,
-    updatedAt: new Date().toISOString(),
-  };
-  state.leads.unshift(lead);
-  save();
-  renderAll();
-}
-
-function seedLeads() {
-  const samples = [
-    ["Mane Techniques", "https://manetechniques.com", "salon", "Booking and service questions could be handled faster with an AI assistant."],
-    ["Blue Skies Pottery", "https://blueskiespottery.com", "pottery studio", "Product discovery and class questions could convert better with guided shopping."],
-    ["Solo Realty", "https://solorealty.com", "real estate", "Property inquiries could be routed into a clearer intake flow."],
-  ];
-  state.leads = samples.map(([name, website, industry, opportunity]) => ({
-    id: crypto.randomUUID(),
-    name,
-    website,
-    email: "",
-    industry,
-    status: "Researched",
-    followup: "",
-    opportunity,
-    notes: "Sample lead based on your strongest open-rate patterns.",
-    updatedAt: new Date().toISOString(),
-  }));
-  save();
-  renderAll();
-}
-
-async function recordVideo() {
-  readDemoForm();
-  const button = $("recordVideoBtn");
-  const status = $("videoStatus");
-  const download = $("videoDownload");
-  download.hidden = true;
-  status.textContent = "";
-
-  if (!("MediaRecorder" in window)) {
-    status.textContent = "This browser does not support built-in video recording. Try Chrome or Edge.";
-    return;
-  }
-
-  const canvas = $("videoCanvas");
-  const ctx = canvas.getContext("2d");
-  const stream = canvas.captureStream(30);
-  const mimeType = [
-    "video/webm;codecs=vp9",
-    "video/webm;codecs=vp8",
-    "video/webm",
-  ].find((type) => MediaRecorder.isTypeSupported(type));
-  if (!mimeType) {
-    status.textContent = "This browser cannot record WebM video from a canvas.";
-    return;
-  }
-
-  const chunks = [];
-  let recorder;
-  try {
-    recorder = new MediaRecorder(stream, { mimeType });
-  } catch (error) {
-    status.textContent = `Recorder failed to start: ${error.message}`;
-    return;
-  }
-
-  recorder.ondataavailable = (event) => chunks.push(event.data);
-  recorder.onstop = () => {
-    const blob = new Blob(chunks, { type: "video/webm" });
-    const url = URL.createObjectURL(blob);
-    const link = download;
-    link.href = url;
-    link.download = `${state.demo.businessName.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}-demo.webm`;
-    link.hidden = false;
-    link.textContent = "Download video";
-    status.textContent = "Video ready.";
-    button.disabled = false;
-    button.textContent = "Record video";
-  };
-
-  recorder.onerror = () => {
-    status.textContent = "Recording failed. Try Chrome, then reload the page.";
-    button.disabled = false;
-    button.textContent = "Record video";
-  };
-
-  button.disabled = true;
-  button.textContent = "Recording...";
-  status.textContent = "Recording a 12-second demo video...";
-  recorder.start();
-
-  const frames = [
-    ["Custom AI website demo", state.demo.businessName, state.demo.goal],
-    ["What we noticed", state.demo.observation, "Clearer path from visitor to customer"],
-    ["Recommended build", state.demo.build, "AI assistant + service pages + analytics"],
-    ["Next step", "60-second demo walkthrough", "15 minute strategy call"],
-  ];
-
-  let frame = 0;
-  drawVideoFrame(ctx, frames[0], frame);
-  const interval = setInterval(() => {
-    const f = frames[Math.floor(frame / 90) % frames.length];
-    drawVideoFrame(ctx, f, frame);
-    frame++;
-  }, 1000 / 30);
-
-  setTimeout(() => {
-    clearInterval(interval);
-    recorder.stop();
-  }, 12000);
-}
-
-function drawVideoFrame(ctx, lines, frame) {
-  const w = ctx.canvas.width;
-  const h = ctx.canvas.height;
-  const pulse = Math.sin(frame / 18) * 20;
-  ctx.fillStyle = "#f4f7fb";
-  ctx.fillRect(0, 0, w, h);
-  ctx.fillStyle = "#14315f";
-  ctx.fillRect(0, 0, w, 110);
-  ctx.fillStyle = "#f47b20";
-  ctx.fillRect(0, 110, w, 8);
-  ctx.fillStyle = "#ffffff";
-  ctx.font = "700 30px system-ui";
-  ctx.fillText("Summit Growth Studio", 58, 68);
-  ctx.fillStyle = "#ffffff";
-  ctx.globalAlpha = 0.16;
-  ctx.beginPath();
-  ctx.arc(1030, 360, 190 + pulse, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.globalAlpha = 1;
-  ctx.fillStyle = "#172033";
-  ctx.font = "800 58px system-ui";
-  wrapCanvasText(ctx, lines[0], 70, 230, 880, 68);
-  ctx.fillStyle = "#14315f";
-  ctx.font = "800 42px system-ui";
-  wrapCanvasText(ctx, lines[1], 70, 360, 900, 52);
-  ctx.fillStyle = "#667085";
-  ctx.font = "500 30px system-ui";
-  wrapCanvasText(ctx, lines[2], 70, 485, 860, 40);
-  ctx.fillStyle = "#16845b";
-  ctx.fillRect(70, 610, 330, 58);
-  ctx.fillStyle = "#ffffff";
-  ctx.font = "800 24px system-ui";
-  ctx.fillText("See the demo concept", 96, 647);
-}
-
-function wrapCanvasText(ctx, text, x, y, maxWidth, lineHeight) {
-  const words = String(text).split(/\s+/);
-  let line = "";
-  for (const word of words) {
-    const test = line ? `${line} ${word}` : word;
-    if (ctx.measureText(test).width > maxWidth && line) {
-      ctx.fillText(line, x, y);
-      line = word;
-      y += lineHeight;
-    } else {
-      line = test;
-    }
-  }
-  ctx.fillText(line, x, y);
-}
-
-function exportJson() {
-  const blob = new Blob([JSON.stringify({ leads: state.leads, demo: state.demo }, null, 2)], { type: "application/json" });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = "summit-growth-studio-data.json";
-  link.click();
-  URL.revokeObjectURL(url);
-}
-
-function sharedPayload() {
-  return { leads: state.leads, demo: state.demo };
-}
-
-function sharedPayloadHash() {
-  return JSON.stringify(sharedPayload());
-}
-
-function scheduleSharedAutosave() {
+function scheduleAutosave() {
   if (isHydrating) return;
-  const config = getDbConfig();
-  if (!config.url || !config.anonKey) return;
-  window.clearTimeout(autosaveTimer);
-  autosaveTimer = window.setTimeout(() => saveSharedState({ silent: true }), 900);
+  clearTimeout(autosaveTimer);
+  autosaveTimer = setTimeout(() => saveShared(true), 800);
 }
 
-async function loadSharedState() {
+async function loadShared() {
   const config = getDbConfig();
-  setDbStatus("Loading shared workspace...");
+  setSync(`Loading ${config.workspaceId}...`);
   try {
     const rows = await supabaseRequest(`marketing_engine_states?id=eq.${encodeURIComponent(config.workspaceId)}&select=data,updated_at`);
-    if (!rows.length) {
-      setDbStatus(`Creating shared workspace "${config.workspaceId}"...`);
-      await saveSharedState({ silent: true, force: true });
-      return;
-    }
-    const data = rows[0].data || {};
+    if (!rows.length) { await saveShared(true, true); return; }
     isHydrating = true;
+    const data = rows[0].data || {};
     state.leads = Array.isArray(data.leads) ? data.leads : [];
-    state.demo = { ...state.demo, ...(data.demo || {}) };
-    save();
+    state.selectedId = data.selectedId || state.leads[0]?.id || null;
+    state.demo = { ...defaultDemo, ...(data.demo || {}) };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(sharedPayload()));
     isHydrating = false;
-    lastSavedHash = sharedPayloadHash();
+    lastSavedHash = payloadHash();
     renderAll();
-    setDbStatus(`Loaded shared workspace "${config.workspaceId}" from ${new Date(rows[0].updated_at).toLocaleString()}.`);
-  } catch (error) {
-    isHydrating = false;
-    setDbStatus(`Load failed: ${error.message}`, true);
-  }
+    setSync(`Synced ${config.workspaceId} at ${new Date(rows[0].updated_at).toLocaleTimeString()}`, "ok");
+  } catch (error) { isHydrating = false; setSync(`Sync failed: ${error.message}`, "bad"); }
 }
 
-async function saveSharedState(options = {}) {
+async function saveShared(silent = false, force = false) {
   const config = getDbConfig();
-  const hash = sharedPayloadHash();
-  if (!options.force && hash === lastSavedHash) {
-    if (!options.silent) setDbStatus(`No changes to sync for "${config.workspaceId}".`);
-    return;
-  }
-  if (!options.silent) setDbStatus("Saving shared workspace...");
+  const hash = payloadHash();
+  if (!force && hash === lastSavedHash) return;
+  if (!silent) setSync("Syncing changes...");
   try {
     await supabaseRequest("marketing_engine_states?on_conflict=id", {
       method: "POST",
       headers: { prefer: "resolution=merge-duplicates,return=minimal" },
-      body: JSON.stringify({
-        id: config.workspaceId,
-        data: sharedPayload(),
-        updated_at: new Date().toISOString(),
-      }),
+      body: JSON.stringify({ id: config.workspaceId, data: sharedPayload(), updated_at: todayIso() }),
     });
     lastSavedHash = hash;
-    setDbStatus(`${options.silent ? "Autosaved" : "Saved"} shared workspace "${config.workspaceId}" at ${new Date().toLocaleTimeString()}.`);
-  } catch (error) {
-    setDbStatus(`Save failed: ${error.message}`, true);
-  }
+    setSync(`Autosaved ${config.workspaceId} at ${new Date().toLocaleTimeString()}`, "ok");
+  } catch (error) { setSync(`Autosave failed: ${error.message}`, "bad"); }
 }
 
-function importJsonFile(file) {
-  if (!file) return;
-  const reader = new FileReader();
-  reader.onload = () => {
-    try {
-      const imported = JSON.parse(String(reader.result || "{}"));
-      if (!Array.isArray(imported.leads)) throw new Error("Missing leads array.");
-      state.leads = imported.leads;
-      state.demo = { ...state.demo, ...(imported.demo || {}) };
-      save();
-      renderAll();
-      setDbStatus("Imported campaign data. Autosave will sync it.");
-    } catch (error) {
-      alert(`Import failed: ${error.message}`);
-    }
-  };
-  reader.readAsText(file);
+function scoreLead(lead) {
+  const t = `${lead.name} ${lead.industry} ${lead.opportunity} ${lead.notes}`.toLowerCase();
+  let score = 35;
+  if (lead.website) score += 8;
+  if (/booking|appointment|quote|call|lead|seo|website|slow|outdated|chatbot|ai|customer/.test(t)) score += 25;
+  if (["Opened", "Replied", "Meeting", "Won"].includes(lead.status)) score += 20;
+  if (lead.followup) score += 5;
+  return Math.min(score, 100);
 }
 
-function escapeHtml(value) {
-  return String(value || "").replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[char]));
+function selectedLead() { return state.leads.find((lead) => lead.id === state.selectedId) || null; }
+
+function blankLead() {
+  const lead = { id: uid(), name: "Untitled business", website: "", email: "", industry: "", status: "New", followup: "", opportunity: "", notes: "", updatedAt: todayIso() };
+  state.leads.unshift(lead); state.selectedId = lead.id; hydrateFromLead(lead); persistLocal(); renderAll();
 }
 
-function escapeAttr(value) {
-  return escapeHtml(value).replace(/`/g, "&#96;");
+function hydrateFromLead(lead) {
+  if (!lead) return;
+  state.demo = { ...state.demo, businessName: lead.name, website: lead.website, industry: lead.industry || "local business", observation: lead.opportunity || state.demo.observation, build: lead.notes?.replace(/^Recommended build:\s*/i, "") || state.demo.build };
 }
 
-function copyText(id) {
-  navigator.clipboard.writeText($(id).textContent);
+function saveLead(event) {
+  event.preventDefault();
+  const id = state.selectedId || uid();
+  const lead = { id, name: $("leadName").value.trim() || "Untitled business", website: normalizeUrl($("leadWebsite").value.trim()), email: $("leadEmail").value.trim(), industry: $("leadIndustry").value.trim(), status: $("leadStatus").value, followup: $("leadFollowup").value, opportunity: $("leadOpportunity").value.trim(), notes: $("leadNotes").value.trim(), updatedAt: todayIso() };
+  const i = state.leads.findIndex((item) => item.id === id);
+  if (i >= 0) state.leads[i] = lead; else state.leads.unshift(lead);
+  state.selectedId = id; hydrateFromLead(lead); persistLocal(); renderAll();
 }
+
+function deleteLead() {
+  if (!state.selectedId) return;
+  state.leads = state.leads.filter((lead) => lead.id !== state.selectedId);
+  state.selectedId = state.leads[0]?.id || null;
+  persistLocal(); renderAll();
+}
+
+function filteredLeads() {
+  const q = $("searchInput")?.value.toLowerCase() || "";
+  const status = $("statusFilter")?.value || "All";
+  return state.leads.filter((lead) => status === "All" || lead.status === status).filter((lead) => `${lead.name} ${lead.email} ${lead.industry} ${lead.status} ${lead.opportunity}`.toLowerCase().includes(q)).sort((a,b) => scoreLead(b) - scoreLead(a));
+}
+
+function renderMetrics() {
+  const open = state.leads.filter((l) => !["Won", "Not fit"].includes(l.status)).length;
+  $("metricTotal").textContent = state.leads.length;
+  $("metricOpen").textContent = open;
+  $("metricMeetings").textContent = state.leads.filter((l) => l.status === "Meeting").length;
+  $("metricWon").textContent = state.leads.filter((l) => l.status === "Won").length;
+}
+
+function renderRows() {
+  const rows = filteredLeads();
+  $("leadCount").textContent = `${rows.length} shown`;
+  $("leadRows").innerHTML = rows.length ? rows.map((lead) => {
+    const active = lead.id === state.selectedId ? "active" : "";
+    const score = scoreLead(lead);
+    return `<tr class="${active}" data-id="${lead.id}"><td><strong>${esc(lead.name)}</strong><span>${esc(lead.industry || lead.email || lead.website || "No details")}</span></td><td><span class="status">${esc(lead.status)}</span></td><td><span class="priority ${score >= 75 ? "hot" : score < 50 ? "low" : ""}">${score}</span></td><td>${esc(lead.followup || "--")}</td></tr>`;
+  }).join("") : `<tr><td colspan="4" class="empty">No leads yet. Click New lead.</td></tr>`;
+}
+
+function renderDetail() {
+  const lead = selectedLead();
+  $("deleteLeadBtn").disabled = !lead;
+  $("detailTitle").textContent = lead ? lead.name : "New lead";
+  $("detailScore").textContent = lead ? `${scoreLead(lead)} priority` : "--";
+  $("leadName").value = lead?.name || ""; $("leadWebsite").value = lead?.website || ""; $("leadEmail").value = lead?.email || ""; $("leadIndustry").value = lead?.industry || ""; $("leadStatus").value = lead?.status || "New"; $("leadFollowup").value = lead?.followup || ""; $("leadOpportunity").value = lead?.opportunity || ""; $("leadNotes").value = lead?.notes || "";
+}
+
+function renderOutreach() {
+  const lead = selectedLead();
+  const business = lead?.name || state.demo.businessName || "the business";
+  const observation = lead?.opportunity || state.demo.observation;
+  $("outreachLead").textContent = lead ? business : "No lead";
+  $("demoLead").textContent = lead ? business : "No lead";
+  $("emailOutput").textContent = `Subject: Question about ${business}'s website\n\nHi,\n\nI was looking at ${business}${lead?.website ? ` (${lead.website})` : ""} and noticed this:\n\n${observation}\n\nI build AI websites and customer intake tools for local businesses, and I mocked up a short concept for how ${business} could turn more visitors into customers.\n\nWould you be open to seeing the 60-second version?`;
+  $("followupOutput").textContent = `Subject: Re: Question about ${business}'s website\n\nQuick follow-up in case this got buried.\n\nThe main idea is simple: ${state.demo.build}\n\nShould I send over the demo concept I mocked up for ${business}?`;
+}
+
+function fillDemoForm() { const d = state.demo; $("demoName").value = d.businessName; $("demoWebsite").value = d.website; $("demoIndustry").value = d.industry; $("demoGoal").value = d.goal; $("demoObservation").value = d.observation; $("demoBuild").value = d.build; }
+function readDemoForm() { state.demo = { businessName: $("demoName").value.trim() || "Local Business", website: normalizeUrl($("demoWebsite").value.trim()), industry: $("demoIndustry").value.trim() || "local business", goal: $("demoGoal").value, observation: $("demoObservation").value.trim(), build: $("demoBuild").value.trim() }; persistLocal(); }
+
+function renderDeck() {
+  const d = state.demo;
+  const slides = [
+    `<section class="slide"><p class="kicker">Custom growth demo</p><h3>${esc(d.businessName || "Local Business")} can convert more visitors.</h3><p>${esc(d.observation)}</p><div class="mini-site"><strong>${esc(d.businessName || "Business")}</strong><span>${esc(d.goal)}</span><button>Book / Contact</button></div></section>`,
+    `<section class="slide"><p class="kicker">Customer path</p><h3>Make the next step obvious.</h3><div class="steps"><span>Discover</span><span>Understand</span><span>Ask AI</span><span>Book</span></div></section>`,
+    `<section class="slide"><p class="kicker">AI assistant</p><h3>A 24/7 front desk.</h3><p>Answers common questions, qualifies leads, and routes serious visitors to the right action.</p></section>`,
+    `<section class="slide"><p class="kicker">Recommended build</p><h3>What to build first.</h3><p>${esc(d.build)}</p></section>`,
+    `<section class="slide"><p class="kicker">Next step</p><h3>Validate with a 15 minute call.</h3><p>Confirm services, goals, pages, and the fastest useful launch.</p></section>`,
+  ];
+  $("deck").innerHTML = slides.join(""); showSlide(state.activeSlide);
+}
+function showSlide(i) { const slides = [...document.querySelectorAll(".slide")]; if (!slides.length) return; state.activeSlide = (i + slides.length) % slides.length; slides.forEach((s, idx) => s.classList.toggle("active", idx === state.activeSlide)); $("slideCounter").textContent = `${state.activeSlide + 1} / ${slides.length}`; }
+
+function exportJson() { const blob = new Blob([JSON.stringify(sharedPayload(), null, 2)], { type: "application/json" }); const url = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = url; a.download = "marketer-crm-backup.json"; a.click(); URL.revokeObjectURL(url); }
+function importJsonFile(file) { if (!file) return; const reader = new FileReader(); reader.onload = () => { try { const data = JSON.parse(String(reader.result || "{}")); state.leads = Array.isArray(data.leads) ? data.leads : []; state.selectedId = data.selectedId || state.leads[0]?.id || null; state.demo = { ...defaultDemo, ...(data.demo || {}) }; persistLocal(); renderAll(); } catch (e) { setSync(`Import failed: ${e.message}`, "bad"); } }; reader.readAsText(file); }
+function copyText(id) { navigator.clipboard.writeText($(id).textContent); }
+
+async function recordVideo() {
+  const status = $("videoStatus"); const canvas = $("videoCanvas");
+  if (!("MediaRecorder" in window)) { status.textContent = "Recording is not supported in this browser."; return; }
+  const ctx = canvas.getContext("2d"); const stream = canvas.captureStream(30); const mimeType = ["video/webm;codecs=vp9", "video/webm;codecs=vp8", "video/webm"].find((t) => MediaRecorder.isTypeSupported(t));
+  if (!mimeType) { status.textContent = "This browser cannot record WebM video."; return; }
+  const chunks = []; const recorder = new MediaRecorder(stream, { mimeType }); recorder.ondataavailable = (e) => chunks.push(e.data); recorder.onstop = () => { const url = URL.createObjectURL(new Blob(chunks, { type: "video/webm" })); const link = $("videoDownload"); link.href = url; link.download = `${(state.demo.businessName || "demo").replace(/[^a-z0-9]+/gi, "-").toLowerCase()}.webm`; link.hidden = false; link.textContent = "Download video"; status.textContent = "Video ready."; };
+  recorder.start(); let frame = 0; const frames = [["Custom demo", state.demo.businessName, state.demo.goal], ["Opportunity", state.demo.observation, ""], ["Recommended build", state.demo.build, ""]];
+  const interval = setInterval(() => { const f = frames[Math.floor(frame / 90) % frames.length]; ctx.fillStyle = "#f6f8fb"; ctx.fillRect(0,0,1280,720); ctx.fillStyle = "#14315f"; ctx.fillRect(0,0,1280,110); ctx.fillStyle = "white"; ctx.font = "800 34px system-ui"; ctx.fillText("Marketer CRM", 60,70); ctx.fillStyle = "#172033"; ctx.font = "800 60px system-ui"; ctx.fillText(f[0], 70,250); ctx.fillStyle = "#14315f"; ctx.font = "800 42px system-ui"; ctx.fillText(String(f[1]).slice(0,48), 70,360); ctx.fillStyle = "#667085"; ctx.font = "500 30px system-ui"; ctx.fillText(String(f[2]).slice(0,68), 70,450); frame++; }, 1000/30);
+  status.textContent = "Recording 10 second demo..."; setTimeout(() => { clearInterval(interval); recorder.stop(); }, 10000);
+}
+
+function saveDbConfig() { localStorage.setItem(DB_CONFIG_KEY, JSON.stringify({ url: $("supabaseUrl").value.trim(), anonKey: $("supabaseAnonKey").value.trim(), workspaceId: $("workspaceId").value.trim() || "summit-team" })); setSync("Database settings saved. Reloading shared workspace..."); loadShared(); }
+function fillSettings() { const c = getDbConfig(); $("supabaseUrl").value = c.url; $("supabaseAnonKey").value = c.anonKey; $("workspaceId").value = c.workspaceId; }
+
+function renderAll() { renderMetrics(); renderRows(); renderDetail(); fillDemoForm(); renderOutreach(); renderDeck(); }
 
 function bindEvents() {
-  document.querySelectorAll(".nav-tab").forEach((tab) => {
-    tab.addEventListener("click", () => {
-      document.querySelectorAll(".nav-tab").forEach((item) => item.classList.remove("active"));
-      document.querySelectorAll(".view").forEach((view) => view.classList.remove("active"));
-      tab.classList.add("active");
-      $(`${tab.dataset.view}View`).classList.add("active");
-      $("viewTitle").textContent = tab.textContent;
-    });
-  });
-
-  $("leadForm").addEventListener("submit", saveLead);
-  $("clearLeadBtn").addEventListener("click", clearLeadForm);
-  $("leadSearch").addEventListener("input", renderLeads);
-  $("statusFilter").addEventListener("change", renderLeads);
-  $("seedLeadsBtn").addEventListener("click", seedLeads);
-  $("exportJsonBtn").addEventListener("click", exportJson);
-  $("exportJsonBtnSecondary").addEventListener("click", exportJson);
-  $("saveDbConfigBtn").addEventListener("click", saveDbConfig);
-  $("loadSharedBtn").addEventListener("click", loadSharedState);
-  $("loadSharedBtnSecondary").addEventListener("click", loadSharedState);
-  $("saveSharedBtn").addEventListener("click", saveSharedState);
-  $("saveSharedBtnSecondary").addEventListener("click", saveSharedState);
-  $("importJsonBtn").addEventListener("click", () => $("importJsonInput").click());
-  $("importJsonBtnSecondary").addEventListener("click", () => $("importJsonInput").click());
-  $("importJsonInput").addEventListener("change", (event) => importJsonFile(event.target.files[0]));
-  $("demoForm").addEventListener("submit", (event) => {
-    event.preventDefault();
-    readDemoForm();
-    renderDeck();
-  });
-  $("saveDemoLeadBtn").addEventListener("click", saveDemoAsLead);
-  $("prevSlideBtn").addEventListener("click", () => showSlide(state.activeSlide - 1));
-  $("nextSlideBtn").addEventListener("click", () => showSlide(state.activeSlide + 1));
-  $("printDeckBtn").addEventListener("click", () => window.print());
-  $("recordVideoBtn").addEventListener("click", recordVideo);
-  $("copyEmailBtn").addEventListener("click", () => copyText("emailOutput"));
-  $("copyFollowupBtn").addEventListener("click", () => copyText("followupOutput"));
-
-  $("leadList").addEventListener("click", (event) => {
-    const button = event.target.closest("button");
-    if (!button) return;
-    const lead = state.leads.find((item) => item.id === button.dataset.id);
-    if (!lead) return;
-    if (button.dataset.action === "edit") fillLeadForm(lead);
-    if (button.dataset.action === "delete") state.leads = state.leads.filter((item) => item.id !== lead.id);
-    if (button.dataset.action === "opened") lead.status = "Opened";
-    if (button.dataset.action === "demo") {
-      state.demo = {
-        ...state.demo,
-        businessName: lead.name,
-        website: lead.website,
-        industry: lead.industry || "local business",
-        observation: lead.opportunity || state.demo.observation,
-        build: lead.notes?.replace(/^Recommended build:\s*/i, "") || state.demo.build,
-      };
-      fillDemoForm();
-      renderDeck();
-      document.querySelector('[data-view="demo"]').click();
-    }
-    save();
-    renderAll();
-  });
+  document.querySelectorAll(".rail-btn").forEach((btn) => btn.addEventListener("click", () => { document.querySelectorAll(".rail-btn").forEach((b) => b.classList.remove("active")); document.querySelectorAll(".view").forEach((v) => v.classList.remove("active")); btn.classList.add("active"); $(`${btn.dataset.view}View`).classList.add("active"); }));
+  $("newLeadBtn").addEventListener("click", blankLead); $("syncNowBtn").addEventListener("click", () => saveShared(false, true)); $("searchInput").addEventListener("input", renderRows); $("statusFilter").addEventListener("change", renderRows); $("leadForm").addEventListener("submit", saveLead); $("deleteLeadBtn").addEventListener("click", deleteLead);
+  $("leadRows").addEventListener("click", (e) => { const tr = e.target.closest("tr[data-id]"); if (!tr) return; state.selectedId = tr.dataset.id; hydrateFromLead(selectedLead()); persistLocal(); renderAll(); });
+  $("demoForm").addEventListener("submit", (e) => { e.preventDefault(); readDemoForm(); renderAll(); }); $("prevSlideBtn").addEventListener("click", () => showSlide(state.activeSlide - 1)); $("nextSlideBtn").addEventListener("click", () => showSlide(state.activeSlide + 1)); $("printDeckBtn").addEventListener("click", () => window.print()); $("recordVideoBtn").addEventListener("click", recordVideo);
+  $("copyEmailBtn").addEventListener("click", () => copyText("emailOutput")); $("copyFollowupBtn").addEventListener("click", () => copyText("followupOutput")); $("markContactedBtn").addEventListener("click", () => { const lead = selectedLead(); if (!lead) return; lead.status = "Contacted"; persistLocal(); renderAll(); });
+  $("saveDbConfigBtn").addEventListener("click", saveDbConfig); $("loadSharedBtn").addEventListener("click", loadShared); $("exportJsonBtn").addEventListener("click", exportJson); $("importJsonBtn").addEventListener("click", () => $("importJsonInput").click()); $("importJsonInput").addEventListener("change", (e) => importJsonFile(e.target.files[0]));
 }
 
-function renderAll() {
-  renderMetrics();
-  renderLeads();
-  fillDemoForm();
-  renderDeck();
-}
-
-load();
-bindEvents();
-renderAll();
-fillDbConfigForm();
-window.setTimeout(loadSharedState, 250);
+loadLocal(); bindEvents(); fillSettings(); renderAll(); setTimeout(loadShared, 250);

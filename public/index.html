@@ -3,206 +3,122 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Summit Growth Studio</title>
+    <title>Marketer CRM</title>
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
-    <main class="app-shell">
-      <aside class="sidebar">
-        <div class="brand-block">
-          <div class="brand-mark">S</div>
-          <div>
-            <p class="eyebrow">Summit Systems</p>
-            <h1>Growth Studio</h1>
-          </div>
-        </div>
-
-        <nav class="nav-tabs" aria-label="Workspace sections">
-          <button class="nav-tab active" data-view="crm">Lead Tracker</button>
-          <button class="nav-tab" data-view="demo">Demo Builder</button>
-          <button class="nav-tab" data-view="exports">Exports</button>
+    <main class="app">
+      <aside class="rail">
+        <div class="logo">M</div>
+        <nav class="rail-nav" aria-label="Primary">
+          <button class="rail-btn active" data-view="pipeline" title="Pipeline">P</button>
+          <button class="rail-btn" data-view="outreach" title="Outreach">O</button>
+          <button class="rail-btn" data-view="demo" title="Demo">D</button>
+          <button class="rail-btn" data-view="settings" title="Settings">S</button>
         </nav>
-
-        <section class="sidebar-panel">
-          <p class="panel-title">Today</p>
-          <div class="metric-grid">
-            <div>
-              <strong id="metricLeads">0</strong>
-              <span>leads</span>
-            </div>
-            <div>
-              <strong id="metricHot">0</strong>
-              <span>hot</span>
-            </div>
-            <div>
-              <strong id="metricFollowups">0</strong>
-              <span>follow-ups</span>
-            </div>
-          </div>
-        </section>
-
-        <section class="sidebar-panel">
-          <p class="panel-title">Best subject pattern</p>
-          <p class="small-copy">Question about [Business]’s website</p>
-        </section>
       </aside>
 
-      <section class="workspace">
+      <section class="shell">
         <header class="topbar">
           <div>
-            <p class="eyebrow">Local business acquisition</p>
-            <h2 id="viewTitle">Lead Tracker</h2>
+            <p class="kicker">Summit team workspace</p>
+            <h1>Marketing CRM</h1>
           </div>
-          <div class="topbar-actions">
-            <button id="seedLeadsBtn" class="ghost-btn" type="button">Load sample leads</button>
-            <button id="loadSharedBtn" class="ghost-btn" type="button">Load shared</button>
-            <button id="saveSharedBtn" class="primary-btn" type="button">Sync now</button>
-            <button id="importJsonBtn" class="ghost-btn" type="button">Import team data</button>
-            <button id="exportJsonBtn" class="primary-btn" type="button">Export data</button>
-            <input id="importJsonInput" type="file" accept="application/json" hidden />
-          </div>
+          <div class="sync-card" id="syncStatus">Connecting to shared workspace...</div>
         </header>
 
-        <section id="crmView" class="view active">
-          <div class="split-layout">
-            <form id="leadForm" class="tool-panel">
-              <div class="section-heading">
-                <p class="eyebrow">CRM</p>
-                <h3>Add or update a lead</h3>
-              </div>
-              <div class="form-grid">
-                <label>Business name<input id="leadName" required placeholder="Blue Skies Pottery" /></label>
-                <label>Website<input id="leadWebsite" placeholder="https://example.com" /></label>
-                <label>Email<input id="leadEmail" type="email" placeholder="owner@example.com" /></label>
-                <label>Industry<input id="leadIndustry" placeholder="salon, pottery, roofing..." /></label>
-                <label>Status
-                  <select id="leadStatus">
-                    <option>New</option>
-                    <option>Researched</option>
-                    <option>Contacted</option>
-                    <option>Opened</option>
-                    <option>Replied</option>
-                    <option>Meeting</option>
-                    <option>Won</option>
-                    <option>Not fit</option>
-                  </select>
-                </label>
-                <label>Next follow-up<input id="leadFollowup" type="date" /></label>
-              </div>
-              <label>Specific opportunity<textarea id="leadOpportunity" placeholder="Booking takes too many clicks; add AI intake and clearer CTA."></textarea></label>
-              <label>Notes<textarea id="leadNotes" placeholder="Owner name, context, objections, last message..."></textarea></label>
-              <div class="button-row">
-                <button class="primary-btn" type="submit">Save lead</button>
-                <button id="clearLeadBtn" class="ghost-btn" type="button">Clear</button>
-              </div>
-            </form>
+        <section class="metrics">
+          <article><span>Total leads</span><strong id="metricTotal">0</strong></article>
+          <article><span>Open pipeline</span><strong id="metricOpen">0</strong></article>
+          <article><span>Meetings</span><strong id="metricMeetings">0</strong></article>
+          <article><span>Won</span><strong id="metricWon">0</strong></article>
+        </section>
 
-            <section class="tool-panel">
-              <div class="section-heading">
-                <p class="eyebrow">Pipeline</p>
-                <h3>Prioritized leads</h3>
+        <section id="pipelineView" class="view active">
+          <div class="toolbar">
+            <div class="searchbox"><input id="searchInput" placeholder="Search business, email, industry, status..." /></div>
+            <select id="statusFilter">
+              <option value="All">All statuses</option>
+              <option>New</option><option>Researched</option><option>Contacted</option><option>Opened</option><option>Replied</option><option>Meeting</option><option>Won</option><option>Not fit</option>
+            </select>
+            <button id="newLeadBtn" class="primary">New lead</button>
+            <button id="syncNowBtn" class="secondary">Sync now</button>
+          </div>
+
+          <div class="board">
+            <section class="panel leads-panel">
+              <div class="panel-head"><h2>Leads</h2><span id="leadCount">0 shown</span></div>
+              <div class="table-wrap">
+                <table>
+                  <thead><tr><th>Business</th><th>Status</th><th>Priority</th><th>Follow-up</th></tr></thead>
+                  <tbody id="leadRows"></tbody>
+                </table>
               </div>
-              <div class="filters">
-                <input id="leadSearch" placeholder="Search leads..." />
-                <select id="statusFilter">
-                  <option value="All">All statuses</option>
-                  <option>New</option>
-                  <option>Researched</option>
-                  <option>Contacted</option>
-                  <option>Opened</option>
-                  <option>Replied</option>
-                  <option>Meeting</option>
-                  <option>Won</option>
-                  <option>Not fit</option>
-                </select>
-              </div>
-              <div id="leadList" class="lead-list"></div>
+            </section>
+
+            <aside class="panel detail-panel">
+              <div class="panel-head"><h2 id="detailTitle">Select a lead</h2><span id="detailScore" class="badge">--</span></div>
+              <form id="leadForm" class="detail-form">
+                <label>Business<input id="leadName" required /></label>
+                <div class="two"><label>Website<input id="leadWebsite" /></label><label>Email<input id="leadEmail" type="email" /></label></div>
+                <div class="two"><label>Industry<input id="leadIndustry" /></label><label>Status<select id="leadStatus"><option>New</option><option>Researched</option><option>Contacted</option><option>Opened</option><option>Replied</option><option>Meeting</option><option>Won</option><option>Not fit</option></select></label></div>
+                <label>Next follow-up<input id="leadFollowup" type="date" /></label>
+                <label>Opportunity<textarea id="leadOpportunity"></textarea></label>
+                <label>Notes<textarea id="leadNotes"></textarea></label>
+                <div class="actions"><button class="primary" type="submit">Save lead</button><button id="deleteLeadBtn" class="danger" type="button">Delete</button></div>
+              </form>
+            </aside>
+          </div>
+        </section>
+
+        <section id="outreachView" class="view">
+          <div class="workspace-grid">
+            <section class="panel">
+              <div class="panel-head"><h2>Selected lead outreach</h2><span id="outreachLead" class="badge">No lead</span></div>
+              <pre id="emailOutput" class="copybox"></pre>
+              <div class="actions"><button id="copyEmailBtn" class="primary">Copy email</button><button id="markContactedBtn" class="secondary">Mark contacted</button></div>
+            </section>
+            <section class="panel">
+              <div class="panel-head"><h2>Follow-up</h2><span class="badge">3-5 days</span></div>
+              <pre id="followupOutput" class="copybox"></pre>
+              <button id="copyFollowupBtn" class="primary">Copy follow-up</button>
             </section>
           </div>
         </section>
 
         <section id="demoView" class="view">
-          <div class="split-layout wide-left">
-            <form id="demoForm" class="tool-panel">
-              <div class="section-heading">
-                <p class="eyebrow">Demo builder</p>
-                <h3>Generate a custom sales deck</h3>
-              </div>
-              <div class="form-grid">
-                <label>Business name<input id="demoName" required placeholder="Mane Techniques" /></label>
-                <label>Website<input id="demoWebsite" placeholder="https://manetechniques.com" /></label>
-                <label>Industry<input id="demoIndustry" placeholder="hair salon" /></label>
-                <label>Primary goal
-                  <select id="demoGoal">
-                    <option>More booked appointments</option>
-                    <option>More quote requests</option>
-                    <option>More phone calls</option>
-                    <option>More online orders</option>
-                    <option>Better Google visibility</option>
-                  </select>
-                </label>
-              </div>
-              <label>What you noticed<textarea id="demoObservation" placeholder="The website has service info, but the booking path could be faster and the FAQ could answer common questions automatically."></textarea></label>
-              <label>Recommended build<textarea id="demoBuild" placeholder="AI website assistant, booking guidance, service pages, analytics dashboard, and faster call-to-action flow."></textarea></label>
-              <div class="button-row">
-                <button class="primary-btn" type="submit">Generate demo</button>
-                <button id="saveDemoLeadBtn" class="ghost-btn" type="button">Save as lead</button>
-              </div>
-            </form>
-
-            <section class="demo-stage">
-              <div class="deck-toolbar">
-                <button id="prevSlideBtn" class="icon-btn" type="button" aria-label="Previous slide">‹</button>
-                <span id="slideCounter">1 / 5</span>
-                <button id="nextSlideBtn" class="icon-btn" type="button" aria-label="Next slide">›</button>
-                <button id="printDeckBtn" class="ghost-btn" type="button">Print deck</button>
-                <button id="recordVideoBtn" class="primary-btn" type="button">Record video</button>
-              </div>
-              <p id="videoStatus" class="video-status"></p>
-              <article id="deck" class="deck" aria-live="polite"></article>
-              <canvas id="videoCanvas" width="1280" height="720" hidden></canvas>
-              <a id="videoDownload" class="download-link" hidden>Download video</a>
+          <div class="workspace-grid wide">
+            <section class="panel">
+              <div class="panel-head"><h2>Demo builder</h2><span id="demoLead" class="badge">No lead</span></div>
+              <form id="demoForm" class="detail-form">
+                <div class="two"><label>Business<input id="demoName" /></label><label>Website<input id="demoWebsite" /></label></div>
+                <div class="two"><label>Industry<input id="demoIndustry" /></label><label>Goal<select id="demoGoal"><option>More booked appointments</option><option>More quote requests</option><option>More phone calls</option><option>More online orders</option><option>Better Google visibility</option></select></label></div>
+                <label>Observation<textarea id="demoObservation"></textarea></label>
+                <label>Recommended build<textarea id="demoBuild"></textarea></label>
+                <div class="actions"><button class="primary" type="submit">Update demo</button><button id="recordVideoBtn" class="secondary" type="button">Record video</button></div>
+                <p id="videoStatus" class="hint"></p><canvas id="videoCanvas" width="1280" height="720" hidden></canvas><a id="videoDownload" class="download" hidden>Download video</a>
+              </form>
             </section>
+            <section class="panel deck-panel"><div class="deck-toolbar"><button id="prevSlideBtn" class="secondary">Prev</button><span id="slideCounter">1 / 5</span><button id="nextSlideBtn" class="secondary">Next</button><button id="printDeckBtn" class="secondary">Print</button></div><article id="deck" class="deck"></article></section>
           </div>
         </section>
 
-        <section id="exportsView" class="view">
-          <div class="exports-grid">
-            <section class="tool-panel">
-              <div class="section-heading">
-                <p class="eyebrow">Outreach</p>
-                <h3>Generated email</h3>
+        <section id="settingsView" class="view">
+          <div class="workspace-grid">
+            <section class="panel">
+              <div class="panel-head"><h2>Shared database</h2><span class="badge">Supabase</span></div>
+              <div class="detail-form">
+                <label>Supabase URL<input id="supabaseUrl" /></label>
+                <label>Anon key<input id="supabaseAnonKey" /></label>
+                <label>Workspace ID<input id="workspaceId" /></label>
+                <div class="actions"><button id="saveDbConfigBtn" class="primary">Save settings</button><button id="loadSharedBtn" class="secondary">Reload shared</button></div>
+                <p class="hint">Autosave is on. The app loads shared data on open and saves changes after edits.</p>
               </div>
-              <pre id="emailOutput" class="copy-box"></pre>
-              <button id="copyEmailBtn" class="primary-btn" type="button">Copy email</button>
             </section>
-            <section class="tool-panel">
-              <div class="section-heading">
-                <p class="eyebrow">Follow-up</p>
-                <h3>Next message</h3>
-              </div>
-              <pre id="followupOutput" class="copy-box"></pre>
-              <button id="copyFollowupBtn" class="primary-btn" type="button">Copy follow-up</button>
-            </section>
-            <section class="tool-panel">
-              <div class="section-heading">
-                <p class="eyebrow">Team database</p>
-                <h3>Supabase shared workspace</h3>
-              </div>
-              <div class="form-grid">
-                <label>Supabase URL<input id="supabaseUrl" placeholder="https://project.supabase.co" /></label>
-                <label>Anon key<input id="supabaseAnonKey" placeholder="eyJhbGciOi..." /></label>
-                <label>Workspace ID<input id="workspaceId" placeholder="summit-team" /></label>
-              </div>
-              <p id="dbStatus" class="db-status">Not connected to shared database yet.</p>
-              <div class="button-row">
-                <button id="saveDbConfigBtn" class="primary-btn" type="button">Save database settings</button>
-                <button id="loadSharedBtnSecondary" class="ghost-btn" type="button">Load shared</button>
-                <button id="saveSharedBtnSecondary" class="ghost-btn" type="button">Sync now</button>
-              </div>
-              <pre class="copy-box schema-box">Autosave is on. The app loads this workspace on page open and saves edits after changes.
-
-Create this table in Supabase SQL Editor:
+            <section class="panel">
+              <div class="panel-head"><h2>Backup</h2><span class="badge">JSON</span></div>
+              <div class="actions stacked"><button id="exportJsonBtn" class="primary">Export backup</button><button id="importJsonBtn" class="secondary">Import backup</button><input id="importJsonInput" type="file" accept="application/json" hidden /></div>
+              <pre class="schema">Supabase table required:
 
 create table if not exists public.marketing_engine_states (
   id text primary key,
@@ -212,35 +128,14 @@ create table if not exists public.marketing_engine_states (
 
 alter table public.marketing_engine_states enable row level security;
 
-create policy "Allow shared browser reads"
-on public.marketing_engine_states for select
-using (true);
-
-create policy "Allow shared browser writes"
-on public.marketing_engine_states for insert
-with check (true);
-
-create policy "Allow shared browser updates"
-on public.marketing_engine_states for update
-using (true)
-with check (true);</pre>
-            </section>
-            <section class="tool-panel">
-              <div class="section-heading">
-                <p class="eyebrow">Backup</p>
-                <h3>Campaign file</h3>
-              </div>
-              <pre class="copy-box">Use Export data as a manual backup. Import team data can restore a campaign JSON file into this browser.</pre>
-              <div class="button-row">
-                <button id="exportJsonBtnSecondary" class="primary-btn" type="button">Export data</button>
-                <button id="importJsonBtnSecondary" class="ghost-btn" type="button">Import team data</button>
-              </div>
+create policy "Allow shared browser reads" on public.marketing_engine_states for select using (true);
+create policy "Allow shared browser writes" on public.marketing_engine_states for insert with check (true);
+create policy "Allow shared browser updates" on public.marketing_engine_states for update using (true) with check (true);</pre>
             </section>
           </div>
         </section>
       </section>
     </main>
-
     <script src="app.js"></script>
   </body>
 </html>
