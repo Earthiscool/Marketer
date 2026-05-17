@@ -73,8 +73,9 @@ async function supabaseRequest(path, options = {}) {
     },
   });
   if (!res.ok) throw new Error(await res.text());
-  if (res.status === 204) return null;
-  return res.json();
+  const text = await res.text();
+  if (!text) return null;
+  return JSON.parse(text);
 }
 
 function save() {
@@ -546,7 +547,7 @@ async function saveSharedState() {
   try {
     await supabaseRequest("marketing_engine_states", {
       method: "POST",
-      headers: { prefer: "resolution=merge-duplicates" },
+      headers: { prefer: "resolution=merge-duplicates,return=minimal" },
       body: JSON.stringify({
         id: config.workspaceId,
         data: { leads: state.leads, demo: state.demo },
